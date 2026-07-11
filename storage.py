@@ -15,8 +15,21 @@ CREATE TABLE IF NOT EXISTS events (
 )
 """)
 
+# Insert a test row
+cursor.execute("""
+INSERT INTO events (timestamp, line_number, variable_name, serialized_value)
+VALUES (?, ?, ?, ?)
+""", ("2026-07-11 10:00:00", 1, "name", "Tejas"))
+
 # Save changes
 conn.commit()
-conn.close()
 
-print("Database and schema created successfully!")
+# Read back and print all rows to confirm it worked
+cursor.execute("SELECT * FROM events")
+rows = cursor.fetchall()
+print("Current data in the table:")
+for row in rows:
+    print(row)
+
+conn.close()
+print("Database created and tested successfully!")

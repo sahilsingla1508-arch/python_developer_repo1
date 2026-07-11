@@ -1,8 +1,11 @@
+import ast
+
+
 with open("sample.py", "r") as file:
     code = file.read()
 
-print(code)
+tree = ast.parse(code)
 
-print(type(code))
+#print(tree)
 
-print(len(code))
+print(ast.dump(tree, indent=4))

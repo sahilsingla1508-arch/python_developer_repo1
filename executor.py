@@ -42,12 +42,37 @@ class PythonExecutor:
         print(self.get_source())
         print("=" * 40)
 
+    def execute(self):
+        if not self.file_exists():
+            raise FileNotFoundError(f"{self.filename} not found.")
+
+        source = self.get_source()
+
+        compiled_code = compile(source, self.filename, "exec")
+
+        print("=" * 40)
+        print("Executing Program")
+        print("=" * 40)
+
+        exec(compiled_code)
+
+        print("=" * 40)
+        print("Execution Completed Successfully")
+        print("=" * 40)
+
+        return True
+
 
 if __name__ == "__main__":
     executor = PythonExecutor("sample.py")
 
-    if executor.file_exists():
+    try:
         executor.show_file_info()
         executor.display_source()
-    else:
-        print("File not found.")
+        executor.execute()
+
+    except FileNotFoundError as e:
+        print(e)
+
+    except Exception as e:
+        print("Execution Error:", e)

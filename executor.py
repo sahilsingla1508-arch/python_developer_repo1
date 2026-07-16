@@ -15,24 +15,31 @@ class PythonExecutor:
     def get_source(self):
         return self.load_source()
 
-    def show_file_info(self):
+    def get_file_stats(self):
         source = self.get_source()
+
+        return {
+            "filename": self.filename,
+            "characters": len(source),
+            "lines": len(source.splitlines())
+        }
+
+    def show_file_info(self):
+        stats = self.get_file_stats()
 
         print("=" * 40)
         print("File Information")
         print("=" * 40)
-        print("Filename   :", self.filename)
-        print("Characters :", len(source))
-        print("Lines      :", len(source.splitlines()))
+        print("Filename   :", stats["filename"])
+        print("Characters :", stats["characters"])
+        print("Lines      :", stats["lines"])
         print("=" * 40)
 
     def display_source(self):
-        source = self.get_source()
-
         print("=" * 40)
         print("Source Code")
         print("=" * 40)
-        print(source)
+        print(self.get_source())
         print("=" * 40)
 
 

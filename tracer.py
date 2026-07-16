@@ -36,4 +36,4 @@ def run_with_trace(filename):
     sys.settrace(None)
 
 if __name__ == "__main__":
-    run_with_trace("sample.py")
+    run_with_trace("sample2.py")

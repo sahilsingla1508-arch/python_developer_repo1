@@ -12,15 +12,27 @@ class PythonExecutor:
         with open(self.filename, "r", encoding="utf-8") as file:
             return file.read()
 
+    def get_source(self):
+        return self.load_source()
+
     def show_file_info(self):
-        source = self.load_source()
+        source = self.get_source()
 
         print("=" * 40)
         print("File Information")
         print("=" * 40)
-        print("Filename :", self.filename)
+        print("Filename   :", self.filename)
         print("Characters :", len(source))
-        print("Lines :", len(source.splitlines()))
+        print("Lines      :", len(source.splitlines()))
+        print("=" * 40)
+
+    def display_source(self):
+        source = self.get_source()
+
+        print("=" * 40)
+        print("Source Code")
+        print("=" * 40)
+        print(source)
         print("=" * 40)
 
 
@@ -29,6 +41,6 @@ if __name__ == "__main__":
 
     if executor.file_exists():
         executor.show_file_info()
-
+        executor.display_source()
     else:
         print("File not found.")

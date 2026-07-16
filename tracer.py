@@ -31,8 +31,10 @@ def trace_lines(frame, event, arg):
 def run_with_trace(filename):
     with open(filename, "r") as f:
         code = f.read()
+
+    trace_namespace = {}
     sys.settrace(trace_lines)
-    exec(compile(code, filename, "exec"))
+    exec(compile(code, filename, "exec"), trace_namespace)
     sys.settrace(None)
 
 if __name__ == "__main__":

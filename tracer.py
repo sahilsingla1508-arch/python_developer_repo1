@@ -55,12 +55,16 @@ def run_with_trace(filename):
 
     sys.settrace(trace_lines)
 
-    exec(compile(code, filename, "exec"), trace_namespace)
+    try:
+        exec(compile(code, filename, "exec"), trace_namespace)
 
-    sys.settrace(None)
+    except Exception as e:
+        print(f"Execution Error: {e}")
 
-    conn.commit()
-    conn.close()
+    finally:
+        sys.settrace(None)
+        conn.commit()
+        conn.close()
 
 
 if __name__ == "__main__":

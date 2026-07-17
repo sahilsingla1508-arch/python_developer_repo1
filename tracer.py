@@ -44,7 +44,7 @@ def trace_lines(frame, event, arg):
 
 def run_with_trace(filename):
 
-    # Optional: Clear old trace
+    # Clear old trace
     cursor.execute("DELETE FROM events")
     conn.commit()
 
@@ -64,6 +64,12 @@ def run_with_trace(filename):
     finally:
         sys.settrace(None)
         conn.commit()
+
+        # Display total number of trace events
+        cursor.execute("SELECT COUNT(*) FROM events")
+        count = cursor.fetchone()[0]
+        print(f"Total events recorded: {count}")
+
         conn.close()
 
 

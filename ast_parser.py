@@ -26,7 +26,7 @@ def parse_file(filepath: str) -> ast.Module:
     Returns:
         Parsed AST module.
     """
-    with open(filepath, "r") as f:
+    with open(filepath, "r", encoding="utf-8") as f:
         source_code = f.read()
 
     tree = ast.parse(source_code, filename=filepath)
@@ -90,7 +90,11 @@ def find_assignments(tree: ast.Module) -> list[tuple[int, str]]:
     return assignments
 
 
-def _collect_names(target, lineno, out_list):
+def _collect_names(
+    target: ast.AST,
+    lineno: int,
+    out_list: list[tuple[int, str]],
+) -> None:
     """
     Recursively extract variable names from assignment targets.
 
@@ -111,7 +115,7 @@ def _collect_names(target, lineno, out_list):
     elif isinstance(target, (ast.Tuple, ast.List)):
         for elt in target.elts:
             _collect_names(elt, lineno, out_list)
-
+            
 
 def export_assignments(tree: ast.Module) -> list[dict]:
     """

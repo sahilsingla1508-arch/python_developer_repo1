@@ -2,8 +2,9 @@ import os
 
 
 class PythonExecutor:
-    def __init__(self, filename):
+    def __init__(self, filename, tracer=None):
         self.filename = filename
+        self.tracer = tracer
 
     def file_exists(self):
         return os.path.exists(self.filename)
@@ -52,7 +53,16 @@ class PythonExecutor:
         print("=" * 40)
 
         try:
-            exec(source)
+            compiled_code = compile(
+                source,
+                self.filename,
+                "exec"
+            )
+
+            if self.tracer:
+                print("Tracer enabled")
+
+            exec(compiled_code)
 
             print("=" * 40)
             print("Execution Completed Successfully")

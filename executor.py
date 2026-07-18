@@ -70,7 +70,11 @@ class PythonExecutor:
             print("Execution Completed Successfully")
             print("=" * 40)
 
-            return True
+            return {
+                "success": True,
+                "filename": self.filename,
+                "error": None
+            }
 
         except SyntaxError as error:
             print("=" * 40)
@@ -78,7 +82,11 @@ class PythonExecutor:
             print(error)
             print("=" * 40)
 
-            return False
+            return {
+                "success": False,
+                "filename": self.filename,
+                "error": str(error)
+            }
 
         except Exception as error:
             print("=" * 40)
@@ -86,7 +94,11 @@ class PythonExecutor:
             print(error)
             print("=" * 40)
 
-            return False
+            return {
+                "success": False,
+                "filename": self.filename,
+                "error": str(error)
+            }
 
         finally:
             if self.tracer:
@@ -109,7 +121,13 @@ if __name__ == "__main__":
     if executor.file_exists():
         executor.show_file_info()
         executor.show_source()
-        executor.execute()
+
+        result = executor.execute()
+
+        print("=" * 40)
+        print("Execution Result")
+        print("=" * 40)
+        print(result)
 
     else:
         print("File not found.")

@@ -15,6 +15,15 @@ class PythonExecutor:
     def get_source(self):
         return self.load_source()
 
+    def show_source(self):
+        source = self.get_source()
+
+        print("=" * 40)
+        print("Source Code")
+        print("=" * 40)
+        print(source)
+        print("=" * 40)
+
     def get_file_stats(self):
         source = self.get_source()
 
@@ -35,44 +44,46 @@ class PythonExecutor:
         print("Lines      :", stats["lines"])
         print("=" * 40)
 
-    def display_source(self):
-        print("=" * 40)
-        print("Source Code")
-        print("=" * 40)
-        print(self.get_source())
-        print("=" * 40)
-
     def execute(self):
-        if not self.file_exists():
-            raise FileNotFoundError(f"{self.filename} not found.")
-
         source = self.get_source()
-
-        compiled_code = compile(source, self.filename, "exec")
 
         print("=" * 40)
         print("Executing Program")
         print("=" * 40)
 
-        exec(compiled_code)
+        try:
+            exec(source)
 
-        print("=" * 40)
-        print("Execution Completed Successfully")
-        print("=" * 40)
+            print("=" * 40)
+            print("Execution Completed Successfully")
+            print("=" * 40)
 
-        return True
+            return True
+
+        except SyntaxError as error:
+            print("=" * 40)
+            print("Syntax Error")
+            print(error)
+            print("=" * 40)
+
+            return False
+
+        except Exception as error:
+            print("=" * 40)
+            print("Runtime Error")
+            print(error)
+            print("=" * 40)
+
+            return False
 
 
 if __name__ == "__main__":
     executor = PythonExecutor("sample.py")
 
-    try:
+    if executor.file_exists():
         executor.show_file_info()
-        executor.display_source()
+        executor.show_source()
         executor.execute()
 
-    except FileNotFoundError as e:
-        print(e)
-
-    except Exception as e:
-        print("Execution Error:", e)
+    else:
+        print("File not found.")

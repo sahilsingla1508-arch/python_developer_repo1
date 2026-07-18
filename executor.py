@@ -1,4 +1,5 @@
 import os
+import sys
 
 
 class PythonExecutor:
@@ -61,6 +62,7 @@ class PythonExecutor:
 
             if self.tracer:
                 print("Tracer enabled")
+                sys.settrace(self.tracer)
 
             exec(compiled_code)
 
@@ -86,9 +88,23 @@ class PythonExecutor:
 
             return False
 
+        finally:
+            if self.tracer:
+                sys.settrace(None)
+
+
+def simple_tracer(frame, event, arg):
+    if event == "line" and frame.f_code.co_filename.endswith("sample.py"):
+        print(f"Tracing line: {frame.f_lineno}")
+
+    return simple_tracer
+
 
 if __name__ == "__main__":
-    executor = PythonExecutor("sample.py")
+    executor = PythonExecutor(
+        "sample.py",
+        tracer=simple_tracer
+    )
 
     if executor.file_exists():
         executor.show_file_info()

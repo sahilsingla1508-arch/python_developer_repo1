@@ -1,6 +1,8 @@
 import os
 import sys
 
+from tracer import trace_lines
+
 
 class PythonExecutor:
     def __init__(self, filename, tracer=None):
@@ -47,13 +49,13 @@ class PythonExecutor:
         print("=" * 40)
 
     def execute(self):
-        source = self.get_source()
-
         print("=" * 40)
         print("Executing Program")
         print("=" * 40)
 
         try:
+            source = self.get_source()
+
             compiled_code = compile(
                 source,
                 self.filename,
@@ -64,7 +66,13 @@ class PythonExecutor:
                 print("Tracer enabled")
                 sys.settrace(self.tracer)
 
-            exec(compiled_code)
+            execution_namespace = {}
+
+            exec(
+                compiled_code,
+                execution_namespace,
+                execution_namespace
+            )
 
             print("=" * 40)
             print("Execution Completed Successfully")
@@ -105,21 +113,19 @@ class PythonExecutor:
                 sys.settrace(None)
 
 
-def simple_tracer(frame, event, arg):
-    if event == "line" and frame.f_code.co_filename.endswith("sample.py"):
-        print(f"Tracing line: {frame.f_lineno}")
-
-    return simple_tracer
-
-
 if __name__ == "__main__":
+
+    target_file = "sample.py"
+
     executor = PythonExecutor(
-        "sample.py",
-        tracer=simple_tracer
+        target_file,
+        tracer=trace_lines
     )
 
     if executor.file_exists():
+
         executor.show_file_info()
+
         executor.show_source()
 
         result = executor.execute()
@@ -130,4 +136,4 @@ if __name__ == "__main__":
         print(result)
 
     else:
-        print("File not found.")
+        print(f"File not found: {target_file}")

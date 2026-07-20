@@ -1,5 +1,7 @@
 import os
 import sys
+import time
+from datetime import datetime
 
 from tracer import trace_lines
 
@@ -53,8 +55,16 @@ class PythonExecutor:
         print("Executing Program")
         print("=" * 40)
 
+        current_time = datetime.now()
+
+        print("Execution Started :", current_time.strftime("%Y-%m-%d %H:%M:%S"))
+        print("=" * 40)
+
         try:
             source = self.get_source()
+
+            # ---------- Day 6 Step 2 ----------
+            start_time = time.perf_counter()
 
             compiled_code = compile(
                 source,
@@ -74,13 +84,19 @@ class PythonExecutor:
                 execution_namespace
             )
 
+            # ---------- Day 6 Step 3 ----------
+            end_time = time.perf_counter()
+            execution_time = end_time - start_time
+
             print("=" * 40)
             print("Execution Completed Successfully")
             print("=" * 40)
 
+            # ---------- Day 6 Step 4 ----------
             return {
                 "success": True,
                 "filename": self.filename,
+                "execution_time": round(execution_time, 6),
                 "error": None
             }
 
@@ -133,7 +149,11 @@ if __name__ == "__main__":
         print("=" * 40)
         print("Execution Result")
         print("=" * 40)
-        print(result)
+        print("Success        :", result["success"])
+        print("Filename       :", result["filename"])
+        print("Execution Time :", result.get("execution_time"), "seconds")
+        print("Error          :", result["error"])
+        print("=" * 40)
 
     else:
         print(f"File not found: {target_file}")

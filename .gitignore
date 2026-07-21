@@ -3,3 +3,4 @@ __pycache__/
 *.db
 .venv/
 .pytest_cache/
+PyChronicle_AI_Roadmap_Compact.md

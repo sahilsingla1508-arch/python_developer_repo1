@@ -1,5 +1,6 @@
 import sqlite3
-from textual.widgets import Slider, Static
+from textual_slider import Slider
+from textual.widgets import Static
 from textual.containers import Horizontal
 
 class TimelineWidget(Horizontal):

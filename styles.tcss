@@ -26,18 +26,16 @@ Screen {
 #timeline-panel {
     height: 15%;
     background: #17171c;
-    border-top: hlines $accent;
+    border-top: solid $accent;
     align: center middle;
     padding: 1;
 }
 
 .pane-title {
-    font-weight: bold;
     color: $text;
     margin-bottom: 1;
 }
 
 #timeline-label {
     padding: 1 2;
-    font-weight: bold;
 }

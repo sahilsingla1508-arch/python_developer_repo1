@@ -1,6 +1,7 @@
 import sqlite3
 from textual.app import App, ComposeResult
-from textual.widgets import Header, Footer, Static, Slider
+from textual.widgets import Header, Footer, Static
+from textual_slider import Slider
 from textual.containers import Vertical, Horizontal
 from textual.reactive import reactive
 

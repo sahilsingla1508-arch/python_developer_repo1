@@ -8,6 +8,10 @@ Acceptance criteria (from roadmap Task 8):
     4. expected variables exist in the events
     5. expected line/value information is correct
     6. error/edge-case behavior: missing script, syntax error, empty script
+
+Task 9 (UI ↔ data integration):
+    7. ChronicleDataAdapter queries events by line/variable from SQLite
+    8. timeline_select maps an index to source line + variable state
 """
 
 import os
@@ -17,6 +21,7 @@ import textwrap
 import pytest
 
 from pipeline.runner import run_pipeline
+from ui.app import ChronicleDataAdapter, timeline_select
 
 
 # ---------------------------------------------------------------------------
@@ -301,3 +306,161 @@ class TestEdgeCases:
         beta_events = _events_for_var(tmp_db_path, "beta")
         assert any(ev[4] == "42" for ev in alpha_events)
         assert any(ev[4] == "hello" for ev in beta_events)
+
+
+# ---------------------------------------------------------------------------
+# 7. UI ↔ data integration (Day 9 — Task 9)
+# ---------------------------------------------------------------------------
+
+class TestUIDataIntegration:
+    """
+    Verify that ChronicleDataAdapter and timeline_select correctly bridge
+    the SQLite events table with the code viewer and variable panel.
+    """
+
+    # --- ChronicleDataAdapter tests ---
+
+    def test_adapter_get_events_returns_list(self, sample_script_path, tmp_db_path):
+        run_pipeline(sample_script_path, tmp_db_path)
+        adapter = ChronicleDataAdapter(tmp_db_path)
+        events = adapter.get_events()
+        assert isinstance(events, list)
+        assert len(events) > 0
+
+    def test_adapter_events_have_expected_keys(self, sample_script_path, tmp_db_path):
+        run_pipeline(sample_script_path, tmp_db_path)
+        adapter = ChronicleDataAdapter(tmp_db_path)
+        for ev in adapter.get_events():
+            assert "id" in ev
+            assert "timestamp" in ev
+            assert "line_number" in ev
+            assert "variable_name" in ev
+            assert "serialized_value" in ev
+
+    def test_adapter_get_events_at_line_filters_correctly(
+        self, sample_script_path, tmp_db_path
+    ):
+        run_pipeline(sample_script_path, tmp_db_path)
+        adapter = ChronicleDataAdapter(tmp_db_path)
+        all_events = adapter.get_events()
+        # Pick any line that has at least one event
+        distinct_lines = adapter.get_distinct_lines()
+        assert len(distinct_lines) > 0
+        line = distinct_lines[0]
+        filtered = adapter.get_events_at_line(line)
+        assert all(ev["line_number"] == line for ev in filtered)
+        assert len(filtered) > 0
+
+    def test_adapter_get_events_for_var_filters_correctly(
+        self, sample_script_path, tmp_db_path
+    ):
+        run_pipeline(sample_script_path, tmp_db_path)
+        adapter = ChronicleDataAdapter(tmp_db_path)
+        events_for_x = adapter.get_events_for_var("x")
+        assert len(events_for_x) > 0
+        assert all(ev["variable_name"] == "x" for ev in events_for_x)
+
+    def test_adapter_get_distinct_lines_sorted(self, sample_script_path, tmp_db_path):
+        run_pipeline(sample_script_path, tmp_db_path)
+        adapter = ChronicleDataAdapter(tmp_db_path)
+        lines = adapter.get_distinct_lines()
+        assert lines == sorted(lines)
+
+    def test_adapter_get_distinct_vars_includes_expected(
+        self, sample_script_path, tmp_db_path
+    ):
+        run_pipeline(sample_script_path, tmp_db_path)
+        adapter = ChronicleDataAdapter(tmp_db_path)
+        var_names = adapter.get_distinct_vars()
+        for expected_var in ("x", "name", "total"):
+            assert expected_var in var_names, f"Expected variable '{expected_var}' not found"
+
+    # --- timeline_select tests ---
+
+    def test_timeline_select_returns_expected_keys(self, sample_script_path, tmp_db_path):
+        run_pipeline(sample_script_path, tmp_db_path)
+        adapter = ChronicleDataAdapter(tmp_db_path)
+        events = adapter.get_events()
+        source_lines = open(sample_script_path).read().splitlines()
+        state = timeline_select(events, 0, source_lines)
+        assert "event" in state
+        assert "source_line" in state
+        assert "variable_state" in state
+
+    def test_timeline_select_first_event(self, sample_script_path, tmp_db_path):
+        run_pipeline(sample_script_path, tmp_db_path)
+        adapter = ChronicleDataAdapter(tmp_db_path)
+        events = adapter.get_events()
+        source_lines = open(sample_script_path).read().splitlines()
+        state = timeline_select(events, 0, source_lines)
+        # First event corresponds to the first variable captured
+        assert state["event"] is not None
+        assert isinstance(state["source_line"], str)
+        # At index 0, variable_state has exactly one entry
+        assert len(state["variable_state"]) == 1
+
+    def test_timeline_select_accumulates_state(self, sample_script_path, tmp_db_path):
+        """variable_state grows as index advances along the timeline."""
+        run_pipeline(sample_script_path, tmp_db_path)
+        adapter = ChronicleDataAdapter(tmp_db_path)
+        events = adapter.get_events()
+        source_lines = open(sample_script_path).read().splitlines()
+        state_0 = timeline_select(events, 0, source_lines)
+        state_last = timeline_select(events, len(events) - 1, source_lines)
+        assert len(state_last["variable_state"]) >= len(state_0["variable_state"])
+
+    def test_timeline_select_source_line_is_non_empty(
+        self, sample_script_path, tmp_db_path
+    ):
+        """The source_line for every event should be a non-empty string."""
+        run_pipeline(sample_script_path, tmp_db_path)
+        adapter = ChronicleDataAdapter(tmp_db_path)
+        events = adapter.get_events()
+        source_lines = open(sample_script_path).read().splitlines()
+        for idx in range(len(events)):
+            state = timeline_select(events, idx, source_lines)
+            assert isinstance(state["source_line"], str)
+            # Source line must not be empty for events from this script
+            assert len(state["source_line"]) > 0, (
+                f"Empty source_line at index {idx}, "
+                f"line_number={state['event']['line_number']}"
+            )
+
+    def test_timeline_select_variable_state_matches_event(
+        self, sample_script_path, tmp_db_path
+    ):
+        """At any index, variable_state[var] == serialized_value of the last
+        event for that variable up to that index."""
+        run_pipeline(sample_script_path, tmp_db_path)
+        adapter = ChronicleDataAdapter(tmp_db_path)
+        events = adapter.get_events()
+        source_lines = open(sample_script_path).read().splitlines()
+        # At the last index, the event's own var should appear in variable_state
+        last_idx = len(events) - 1
+        state = timeline_select(events, last_idx, source_lines)
+        last_ev = events[last_idx]
+        assert last_ev["variable_name"] in state["variable_state"]
+        assert state["variable_state"][last_ev["variable_name"]] == last_ev["serialized_value"]
+
+    def test_timeline_select_empty_events(self, tmp_db_path):
+        """timeline_select on an empty event list returns safe defaults."""
+        state = timeline_select([], 0, [])
+        assert state["event"] is None
+        assert state["source_line"] == ""
+        assert state["variable_state"] == {}
+
+    def test_timeline_select_index_clamping(self, sample_script_path, tmp_db_path):
+        """Out-of-range indices are clamped to valid bounds."""
+        run_pipeline(sample_script_path, tmp_db_path)
+        adapter = ChronicleDataAdapter(tmp_db_path)
+        events = adapter.get_events()
+        source_lines = open(sample_script_path).read().splitlines()
+        # Index beyond end → same as last
+        state_beyond = timeline_select(events, 99999, source_lines)
+        state_last = timeline_select(events, len(events) - 1, source_lines)
+        assert state_beyond["event"]["id"] == state_last["event"]["id"]
+        # Negative index → same as first
+        state_neg = timeline_select(events, -5, source_lines)
+        state_first = timeline_select(events, 0, source_lines)
+        assert state_neg["event"]["id"] == state_first["event"]["id"]
+

@@ -1,0 +1,43 @@
+Screen {
+    background: #0f0f14;
+}
+
+#workspace {
+    layout: grid;
+    grid-size: 2;
+    grid-columns: 3fr 1fr;
+    height: 85%;
+}
+
+#code-container {
+    border: solid $primary;
+    background: #141419;
+    padding: 1;
+    margin: 1;
+}
+
+#inspector-container {
+    border: solid $secondary;
+    background: #111116;
+    padding: 1;
+    margin: 1;
+}
+
+#timeline-panel {
+    height: 15%;
+    background: #17171c;
+    border-top: solid $accent;
+    align: center middle;
+    padding: 1;
+}
+
+.pane-title {
+    text-style: bold;
+    color: $text;
+    margin-bottom: 1;
+}
+
+#timeline-label {
+    padding: 1 2;
+    text-style: bold;
+}

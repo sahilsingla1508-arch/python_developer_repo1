@@ -3,13 +3,13 @@
 PyChronicle is an AST-powered time-travel debugger for Python.
 
 It traces a Python script execution, captures every variable change as a
-timestamped SQLite event, and lets you replay the execution timeline —
-seeing the source line and variable state at each recorded moment.
+timestamped SQLite event, and provides a data integration layer that maps
+each recorded event to the corresponding source line and variable state.
 
 ## Pipeline
 
 ```
-Script → AST analysis → sys.settrace → SQLite storage → Timeline viewer
+Script → AST analysis → sys.settrace → SQLite storage → UI/data integration layer
 ```
 
 ## Requirements
@@ -51,19 +51,25 @@ Event count : 14
 ==================================================
 ```
 
-## Run the Timeline Viewer (UI Data Integration)
+## Run the UI/Data Integration Demo
 
-Run the full pipeline and replay every recorded event with code viewer
-and variable panel output:
+`ui/app.py` provides the integration adapter (`ChronicleDataAdapter`,
+`timeline_select()`) that bridges stored SQLite events with the code viewer
+and variable panel data. It also includes a terminal demonstration that
+walks through every recorded event sequentially.
+
+> **Note:** This is a non-interactive terminal walk-through, not a live UI.
+> The interactive Textual UI is Sahil's teammate deliverable and is not
+> currently present on this branch.
 
 ```bash
 python ui/app.py examples/sample_script.py
 ```
 
-Each step shows:
+For each recorded event the output shows:
 
-- **Code Viewer** — all source lines with `>>>` marking the active line
-- **Variable Panel** — accumulated variable state at that moment in time
+- **Code Viewer** — all source lines with `>>>` marking the event's line
+- **Variable Panel** — accumulated variable state at that point in execution
 
 ## Run Tests
 
@@ -102,14 +108,16 @@ python -m pipeline.runner examples/sample_script.py
 
 Verify: `Success : True`, `Event count` > 0.
 
-**Step 2 — View the timeline with code viewer and variable panel:**
+**Step 2 — Run the UI/data integration terminal demo:**
 
 ```bash
 python ui/app.py examples/sample_script.py
 ```
 
-Verify: Events are printed with numbered source lines, `>>>` highlighted line,
-and variable panel showing accumulated state.
+Verify: Every recorded event is printed with numbered source lines,
+`>>>` marking the active line, and the accumulated variable state.
+(This is a sequential terminal walk-through; interactive timeline navigation
+requires the Textual UI, which is a pending teammate deliverable.)
 
 **Step 3 — Run the full test suite:**
 
@@ -129,8 +137,9 @@ executor.py            # Python script execution engine
 pipeline/
   runner.py            # Integration glue: AST → trace → SQLite (run_pipeline)
 ui/
-  app.py               # Timeline ↔ data integration: ChronicleDataAdapter,
-                       #   timeline_select(), run_viewer()
+  app.py               # UI/data integration adapter: ChronicleDataAdapter,
+                       #   timeline_select(), run_viewer() (terminal demo).
+                       #   Interactive Textual UI is a pending teammate deliverable.
 examples/
   sample_script.py     # Deterministic demo script for integration tests
 tests/

@@ -47,6 +47,7 @@ if _REPO_ROOT not in sys.path:
     sys.path.insert(0, _REPO_ROOT)
 
 from pipeline.runner import run_pipeline  # noqa: E402  (import after sys.path fixup)
+from pipeline.delta import compress_events, replay_compressed  # noqa: E402,F401
 
 
 # ---------------------------------------------------------------------------
@@ -124,6 +125,24 @@ class ChronicleDataAdapter:
                 "SELECT DISTINCT variable_name FROM events ORDER BY variable_name"
             ).fetchall()
         return [row[0] for row in rows]
+
+    def get_compressed_events(self) -> list:
+        """
+        Return a delta-compressed event list.
+
+        Fetches all events (ordered by id) then applies compress_events() to
+        remove consecutive duplicate values per variable.  The result is
+        suitable for passing directly to timeline_select() or replay_compressed()
+        for a compact replay of the execution timeline.
+
+        Returns
+        -------
+        list[dict]
+            Compressed subset of all stored events; each dict has the same
+            keys as get_events() (id, timestamp, line_number, variable_name,
+            serialized_value).
+        """
+        return compress_events(self.get_events())
 
 
 # ---------------------------------------------------------------------------
@@ -251,23 +270,32 @@ def run_viewer(script_path: str, db_path: str = "chronicle.db") -> dict:
 
     # 2. Load events and source
     adapter = ChronicleDataAdapter(db_path)
-    events = adapter.get_events()
+    raw_events = adapter.get_events()
     source_lines = _load_source_lines(script_path)
 
-    if not events:
+    if not raw_events:
         print("No events to display.")
         return result
 
-    # 3. Walk the timeline
-    print(f"Timeline: {len(events)} events across lines "
+    # 2a. Apply delta compression to the replay stream
+    compressed = adapter.get_compressed_events()
+    raw_count = len(raw_events)
+    comp_count = len(compressed)
+    ratio = raw_count / comp_count if comp_count > 0 else 1.0
+    print(f"Delta compression : {raw_count} raw events → {comp_count} compressed "
+          f"(ratio {ratio:.2f}x)")
+    print()
+
+    # 3. Walk the compressed timeline
+    print(f"Timeline: {comp_count} events (compressed) across lines "
           f"{adapter.get_distinct_lines()}")
     print()
 
-    for idx in range(len(events)):
-        state = timeline_select(events, idx, source_lines)
+    for idx in range(comp_count):
+        state = timeline_select(compressed, idx, source_lines)
         ev = state["event"]
 
-        print(f"--- Timeline event {idx + 1}/{len(events)} "
+        print(f"--- Timeline event {idx + 1}/{comp_count} "
               f"(line {ev['line_number']}, "
               f"var={ev['variable_name']}, "
               f"val={ev['serialized_value']}) ---")
@@ -283,7 +311,8 @@ def run_viewer(script_path: str, db_path: str = "chronicle.db") -> dict:
 
     # Summary
     print("=" * 60)
-    print(f"Timeline complete — {len(events)} events replayed")
+    print(f"Timeline complete — {comp_count} events replayed "
+          f"({raw_count - comp_count} duplicate value events removed)")
     print(f"Distinct variables: {adapter.get_distinct_vars()}")
     print(f"Distinct lines    : {adapter.get_distinct_lines()}")
     print("=" * 60)

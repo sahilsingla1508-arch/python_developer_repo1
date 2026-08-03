@@ -12,6 +12,11 @@ Acceptance criteria (from roadmap Task 8):
 Task 9 (UI ↔ data integration):
     7. ChronicleDataAdapter queries events by line/variable from SQLite
     8. timeline_select maps an index to source line + variable state
+
+Week 3 (delta compression integration):
+    9. compress_events removes consecutive duplicate values per variable
+   10. ChronicleDataAdapter.get_compressed_events returns a compressed list
+   11. replay_compressed wires compression into the timeline_select path
 """
 
 import os
@@ -21,6 +26,7 @@ import textwrap
 import pytest
 
 from pipeline.runner import run_pipeline
+from pipeline.delta import compress_events, replay_compressed
 from ui.app import ChronicleDataAdapter, timeline_select
 
 
@@ -464,3 +470,217 @@ class TestUIDataIntegration:
         state_first = timeline_select(events, 0, source_lines)
         assert state_neg["event"]["id"] == state_first["event"]["id"]
 
+
+# ---------------------------------------------------------------------------
+# 9. Delta compression integration (Week 3)
+# ---------------------------------------------------------------------------
+
+class TestDeltaCompression:
+    """
+    Verify that compress_events, ChronicleDataAdapter.get_compressed_events,
+    and replay_compressed correctly integrate delta compression with the
+    replay pipeline.
+    """
+
+    # --- compress_events unit-level tests ---
+
+    def test_compress_events_removes_consecutive_duplicates(self):
+        """Consecutive events with identical values for the same variable are
+        collapsed to the first occurrence."""
+        events = [
+            {"id": 1, "variable_name": "x", "serialized_value": "1",
+             "line_number": 1, "timestamp": "t"},
+            {"id": 2, "variable_name": "x", "serialized_value": "1",
+             "line_number": 2, "timestamp": "t"},
+            {"id": 3, "variable_name": "x", "serialized_value": "2",
+             "line_number": 3, "timestamp": "t"},
+        ]
+        compressed = compress_events(events)
+        assert len(compressed) == 2
+        assert compressed[0]["id"] == 1
+        assert compressed[1]["id"] == 3
+
+    def test_compress_events_preserves_distinct_vars_independently(self):
+        """Duplicate detection is per-variable: a repeated value for 'y'
+        should be dropped even when 'x' changes between those events."""
+        events = [
+            {"id": 1, "variable_name": "x", "serialized_value": "10",
+             "line_number": 1, "timestamp": "t"},
+            {"id": 2, "variable_name": "y", "serialized_value": "hello",
+             "line_number": 2, "timestamp": "t"},
+            {"id": 3, "variable_name": "x", "serialized_value": "20",
+             "line_number": 3, "timestamp": "t"},
+            {"id": 4, "variable_name": "y", "serialized_value": "hello",
+             "line_number": 4, "timestamp": "t"},  # duplicate for y
+        ]
+        compressed = compress_events(events)
+        # y=hello at id=4 should be dropped; x=10, y=hello, x=20 remain
+        assert len(compressed) == 3
+        ids = [e["id"] for e in compressed]
+        assert 4 not in ids
+
+    def test_compress_events_empty_input(self):
+        """compress_events on an empty list returns an empty list."""
+        assert compress_events([]) == []
+
+    def test_compress_events_no_duplicates_unchanged(self):
+        """When there are no duplicates, all events are preserved."""
+        events = [
+            {"id": 1, "variable_name": "a", "serialized_value": "1",
+             "line_number": 1, "timestamp": "t"},
+            {"id": 2, "variable_name": "b", "serialized_value": "2",
+             "line_number": 2, "timestamp": "t"},
+            {"id": 3, "variable_name": "a", "serialized_value": "3",
+             "line_number": 3, "timestamp": "t"},
+        ]
+        assert compress_events(events) == events
+
+    def test_compress_events_does_not_mutate_input(self):
+        """compress_events must not modify the original event list."""
+        events = [
+            {"id": 1, "variable_name": "x", "serialized_value": "5",
+             "line_number": 1, "timestamp": "t"},
+            {"id": 2, "variable_name": "x", "serialized_value": "5",
+             "line_number": 2, "timestamp": "t"},
+        ]
+        original_length = len(events)
+        compress_events(events)
+        assert len(events) == original_length
+
+    def test_compress_events_result_is_subset_of_input(self):
+        """Every event in the compressed output must have come from the input."""
+        events = [
+            {"id": i, "variable_name": "v", "serialized_value": str(i % 2),
+             "line_number": i, "timestamp": "t"}
+            for i in range(1, 8)
+        ]
+        compressed = compress_events(events)
+        input_ids = {e["id"] for e in events}
+        for ev in compressed:
+            assert ev["id"] in input_ids
+
+    # --- Adapter integration ---
+
+    def test_adapter_get_compressed_events_returns_list(
+        self, sample_script_path, tmp_db_path
+    ):
+        """get_compressed_events returns a non-empty list after running the pipeline."""
+        run_pipeline(sample_script_path, tmp_db_path)
+        adapter = ChronicleDataAdapter(tmp_db_path)
+        compressed = adapter.get_compressed_events()
+        assert isinstance(compressed, list)
+        assert len(compressed) > 0
+
+    def test_compressed_events_subset_of_raw(
+        self, sample_script_path, tmp_db_path
+    ):
+        """Every compressed event id must appear in the raw event list."""
+        run_pipeline(sample_script_path, tmp_db_path)
+        adapter = ChronicleDataAdapter(tmp_db_path)
+        raw_ids = {ev["id"] for ev in adapter.get_events()}
+        for ev in adapter.get_compressed_events():
+            assert ev["id"] in raw_ids
+
+    def test_compressed_events_no_consecutive_duplicates(
+        self, sample_script_path, tmp_db_path
+    ):
+        """In the compressed list, no variable should have two consecutive
+        events with the same serialized_value."""
+        run_pipeline(sample_script_path, tmp_db_path)
+        adapter = ChronicleDataAdapter(tmp_db_path)
+        compressed = adapter.get_compressed_events()
+        last_seen: dict = {}
+        for ev in compressed:
+            var = ev["variable_name"]
+            val = ev["serialized_value"]
+            assert last_seen.get(var) != val, (
+                f"Duplicate consecutive value '{val}' for variable '{var}' "
+                f"found in compressed events"
+            )
+            last_seen[var] = val
+
+    def test_compression_ratio_gte_one(
+        self, sample_script_path, tmp_db_path
+    ):
+        """Compressed event count must be <= raw event count."""
+        run_pipeline(sample_script_path, tmp_db_path)
+        adapter = ChronicleDataAdapter(tmp_db_path)
+        raw_count = len(adapter.get_events())
+        comp_count = len(adapter.get_compressed_events())
+        assert comp_count <= raw_count, (
+            f"Compressed ({comp_count}) should be <= raw ({raw_count})"
+        )
+
+    def test_compressed_events_have_expected_keys(
+        self, sample_script_path, tmp_db_path
+    ):
+        """Each compressed event dict must carry all standard event keys."""
+        run_pipeline(sample_script_path, tmp_db_path)
+        adapter = ChronicleDataAdapter(tmp_db_path)
+        for ev in adapter.get_compressed_events():
+            for key in ("id", "timestamp", "line_number", "variable_name", "serialized_value"):
+                assert key in ev, f"Missing key '{key}' in compressed event"
+
+    # --- replay_compressed integration ---
+
+    def test_replay_compressed_returns_expected_keys(
+        self, sample_script_path, tmp_db_path
+    ):
+        """replay_compressed result must contain the integration keys."""
+        run_pipeline(sample_script_path, tmp_db_path)
+        adapter = ChronicleDataAdapter(tmp_db_path)
+        raw_events = adapter.get_events()
+        source_lines = open(sample_script_path).read().splitlines()
+        result = replay_compressed(raw_events, 0, source_lines)
+        for key in ("compressed_events", "event", "source_line",
+                    "variable_state", "compression_ratio"):
+            assert key in result, f"Missing key '{key}' in replay_compressed result"
+
+    def test_replay_compressed_ratio_positive(
+        self, sample_script_path, tmp_db_path
+    ):
+        """compression_ratio must be a positive float >= 1.0."""
+        run_pipeline(sample_script_path, tmp_db_path)
+        adapter = ChronicleDataAdapter(tmp_db_path)
+        raw_events = adapter.get_events()
+        source_lines = open(sample_script_path).read().splitlines()
+        result = replay_compressed(raw_events, 0, source_lines)
+        ratio = result["compression_ratio"]
+        assert isinstance(ratio, float)
+        assert ratio >= 1.0, f"Expected ratio >= 1.0, got {ratio}"
+
+    def test_replay_compressed_variable_state_non_empty(
+        self, sample_script_path, tmp_db_path
+    ):
+        """At the last compressed-timeline index, variable_state must be non-empty."""
+        run_pipeline(sample_script_path, tmp_db_path)
+        adapter = ChronicleDataAdapter(tmp_db_path)
+        raw_events = adapter.get_events()
+        source_lines = open(sample_script_path).read().splitlines()
+        compressed = adapter.get_compressed_events()
+        last_idx = len(compressed) - 1
+        result = replay_compressed(raw_events, last_idx, source_lines)
+        assert len(result["variable_state"]) > 0
+
+    def test_replay_compressed_empty_events(self):
+        """replay_compressed on an empty event list returns safe defaults."""
+        result = replay_compressed([], 0, [])
+        assert result["event"] is None
+        assert result["variable_state"] == {}
+        assert result["compressed_events"] == []
+
+    def test_replay_compressed_source_line_non_empty(
+        self, sample_script_path, tmp_db_path
+    ):
+        """Each compressed-timeline step should resolve to a non-empty source line."""
+        run_pipeline(sample_script_path, tmp_db_path)
+        adapter = ChronicleDataAdapter(tmp_db_path)
+        raw_events = adapter.get_events()
+        source_lines = open(sample_script_path).read().splitlines()
+        compressed = adapter.get_compressed_events()
+        for idx in range(len(compressed)):
+            result = replay_compressed(raw_events, idx, source_lines)
+            assert isinstance(result["source_line"], str)
+            assert len(result["source_line"]) > 0, (
+                f"Empty source_line at compressed index {idx}"
+            )

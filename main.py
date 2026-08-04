@@ -1,22 +1,23 @@
 import sys
 import os
-from app import PyChronicleUI
+from ui.app import PyChronicleUI  # Adjust import if app.py is in the root
 
 def main():
-    # Enforces CLI syntax configuration: python main.py <target_script.py>
+    """CLI Execution Runner."""
     if len(sys.argv) < 2:
-        print("Usage Error: Please supply a target script.")
-        print("Example: python main.py sample.py")
-        sys.argv.append("sample2.py") # Fallback to prevent crash if run via IDE play button
+        print("[PyChronicle] Error: Missing script argument.")
+        print("Usage: python main.py <target_script.py>")
+        sys.argv.append("sample_1.py") # Fallback script
 
     target_script = sys.argv[1]
-    
+    db_path = "chronicle.db"
+
     if not os.path.exists(target_script):
-        print(f"File Error: '{target_script}' could not be located.")
+        print(f"[PyChronicle] Error: Target file '{target_script}' not found.")
         return
 
-    print(f"[PyChronicle] Launching Interactive TUI Dashboard tracking: {target_script}...")
-    app = PyChronicleUI(target_script=target_script)
+    print(f"[PyChronicle] Launching TUI Time-Travel Debugger for: {target_script}")
+    app = PyChronicleUI(target_script=target_script, db_path=db_path)
     app.run()
 
 if __name__ == "__main__":

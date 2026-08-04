@@ -1,13 +1,9 @@
 import sqlite3
-from textual_slider import Slider
-from textual.widgets import Static
+from textual.widgets import Slider, Static
 from textual.containers import Horizontal
 
 class TimelineWidget(Horizontal):
-    """
-    Orchestrates the time-scrubbing interface.
-    Calculates event density from the backend database structure.
-    """
+    """Interactive timeline controller querying event step densities from SQLite."""
     def __init__(self, db_path: str, **kwargs):
         super().__init__(**kwargs)
         self.db_path = db_path
@@ -17,7 +13,7 @@ class TimelineWidget(Horizontal):
         try:
             conn = sqlite3.connect(self.db_path)
             cursor = conn.cursor()
-            cursor.execute("SELECT COUNT(*) FROM events")
+            cursor.execute("SELECT COUNT(*) FROM state_log")
             res = cursor.fetchone()
             conn.close()
             return res[0] if res and res[0] > 0 else 1
@@ -25,5 +21,5 @@ class TimelineWidget(Horizontal):
             return 1
 
     def compose(self):
-        yield Static("⏱️ Timeline Index: ", id="timeline-label")
+        yield Static("⏱️ Time Step: ", id="timeline-label")
         yield Slider(min=1, max=self.max_events, step=1, value=1, id="timeline-slider")

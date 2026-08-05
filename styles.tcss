@@ -1,41 +1,98 @@
+/* Screen & Global Styling */
 Screen {
-    background: #0f0f14;
+    background: #0a0e14;
+    color: #00ff66;
+    font-family: monospace;
 }
 
+Header {
+    background: #002b11;
+    color: #00ff66;
+    dock: top;
+}
+
+Footer {
+    background: #001a0a;
+    color: #ffb000;
+    dock: bottom;
+}
+
+/* Main 3-Column Layout Workspace */
 #workspace {
     layout: grid;
-    grid-size: 2;
-    grid-columns: 3fr 1fr;
-    height: 85%;
+    grid-size: 3;
+    grid-columns: 3fr 1fr 1fr;
+    height: 82%;
+    padding: 0 1;
 }
 
+/* Individual Panel Containers */
 #code-container {
-    border: solid $primary;
-    background: #141419;
-    padding: 1;
+    border: heavy #00ff66;
+    background: #05080c;
     margin: 1;
+    padding: 1;
 }
 
 #inspector-container {
-    border: solid $secondary;
-    background: #111116;
-    padding: 1;
+    border: heavy #00ccff;
+    background: #05080c;
     margin: 1;
+    padding: 1;
 }
 
-#timeline-panel {
-    height: 15%;
-    background: #17171c;
-    border-top: solid $accent;
-    align: center middle;
+#watchlist-container {
+    border: heavy #ffb000;
+    background: #05080c;
+    margin: 1;
     padding: 1;
 }
 
 .pane-title {
-    color: $text;
+    font-weight: bold;
+    color: #00ff66;
     margin-bottom: 1;
+    text-align: center;
+}
+
+/* DataTable Styling */
+DataTable {
+    background: transparent;
+    border: none;
+}
+
+DataTable > .datatable--header {
+    background: #002b11;
+    color: #00ccff;
+    text-style: bold;
+}
+
+/* Selection List Widget */
+SelectionList {
+    background: transparent;
+    border: none;
+}
+
+SelectionList > .selection-list--button {
+    color: #ffb000;
+}
+
+/* Timeline Container (Bottom) */
+#timeline-panel {
+    height: 18%;
+    background: #001a0a;
+    border-top: heavy #ffb000;
+    align: center middle;
+    padding: 1;
 }
 
 #timeline-label {
+    color: #ffb000;
+    text-style: bold;
     padding: 1 2;
+}
+
+Slider {
+    width: 80%;
+    color: #00ff66;
 }

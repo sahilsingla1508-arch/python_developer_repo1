@@ -17,10 +17,17 @@ Week 3 (delta compression integration):
     9. compress_events removes consecutive duplicate values per variable
    10. ChronicleDataAdapter.get_compressed_events returns a compressed list
    11. replay_compressed wires compression into the timeline_select path
+
+Week 4 (unified CLI integration):
+   12. python -m pychronicle run  — dispatches to run_pipeline and prints result
+   13. python -m pychronicle view — dispatches to run_viewer and prints timeline
+   14. exit codes, argument parsing, help flags, and error handling
 """
 
 import os
 import sqlite3
+import subprocess
+import sys
 import textwrap
 
 import pytest
@@ -684,3 +691,194 @@ class TestDeltaCompression:
             assert len(result["source_line"]) > 0, (
                 f"Empty source_line at compressed index {idx}"
             )
+
+
+
+# ---------------------------------------------------------------------------
+# 10. Unified CLI integration (Week 4)
+# ---------------------------------------------------------------------------
+
+
+class TestCLI:
+    """
+    Verify that the unified ``python -m pychronicle`` CLI entry point
+    (``__main__.py``) correctly wires the pipeline and viewer sub-commands.
+
+    Tests invoke the CLI as a subprocess so they exercise the real argument
+    parsing and exit-code paths without importing internal modules directly.
+    These are integration tests -- they validate the glue layer between the
+    pipeline, the UI adapter, and the end user.
+    """
+
+    # ------------------------------------------------------------------
+    # Helpers
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _run_cli(args, cwd):
+        """Run 'python -m pychronicle <args>' and capture output.
+
+        Always injects the repository root into PYTHONPATH so that the
+        subprocess can locate the pychronicle package and its dependencies
+        regardless of which directory it is invoked from.
+        """
+        import os as _os
+        repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        env = _os.environ.copy()
+        existing = env.get("PYTHONPATH", "")
+        env["PYTHONPATH"] = repo_root + (_os.pathsep + existing if existing else "")
+        return subprocess.run(
+            [sys.executable, "-m", "pychronicle"] + args,
+            capture_output=True,
+            text=True,
+            cwd=cwd,
+            env=env,
+        )
+
+    @staticmethod
+    def _repo_root():
+        """Return the absolute path to the repository root."""
+        return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+    # ------------------------------------------------------------------
+    # 'run' sub-command
+    # ------------------------------------------------------------------
+
+    def test_run_exits_zero_on_success(self, sample_script_path, tmp_db_path):
+        proc = self._run_cli(["run", sample_script_path, tmp_db_path],
+                             cwd=self._repo_root())
+        assert proc.returncode == 0, (
+            "Expected exit 0, got {}. stdout: {} stderr: {}".format(
+                proc.returncode, proc.stdout, proc.stderr)
+        )
+
+    def test_run_stdout_contains_success_true(self, sample_script_path, tmp_db_path):
+        proc = self._run_cli(["run", sample_script_path, tmp_db_path],
+                             cwd=self._repo_root())
+        assert "Success     : True" in proc.stdout, (
+            "Expected 'Success     : True' in output. stdout: {}".format(proc.stdout)
+        )
+
+    def test_run_stdout_contains_event_count(self, sample_script_path, tmp_db_path):
+        proc = self._run_cli(["run", sample_script_path, tmp_db_path],
+                             cwd=self._repo_root())
+        assert "Event count :" in proc.stdout, (
+            "Expected 'Event count :' in output. stdout: {}".format(proc.stdout)
+        )
+
+    def test_run_default_db_creates_chronicle_db(self, sample_script_path, tmp_path):
+        """When no db argument is given, chronicle.db is used in cwd."""
+        proc = self._run_cli(["run", sample_script_path],
+                             cwd=str(tmp_path))
+        assert proc.returncode == 0, (
+            "Expected exit 0. stdout: {} stderr: {}".format(proc.stdout, proc.stderr)
+        )
+        assert os.path.isfile(str(tmp_path / "chronicle.db")), (
+            "chronicle.db not created by 'run' without explicit db argument"
+        )
+
+    def test_run_exits_two_on_missing_script(self, tmp_db_path, tmp_path):
+        missing = str(tmp_path / "no_such_file.py")
+        proc = self._run_cli(["run", missing, tmp_db_path],
+                             cwd=self._repo_root())
+        assert proc.returncode == 2, (
+            "Expected exit 2 for missing script, got {}. stdout: {}".format(
+                proc.returncode, proc.stdout)
+        )
+
+    def test_run_stdout_contains_script_path(self, sample_script_path, tmp_db_path):
+        proc = self._run_cli(["run", sample_script_path, tmp_db_path],
+                             cwd=self._repo_root())
+        assert "Script" in proc.stdout, (
+            "Expected 'Script' in output. stdout: {}".format(proc.stdout)
+        )
+
+    def test_run_stdout_contains_ast_vars(self, sample_script_path, tmp_db_path):
+        proc = self._run_cli(["run", sample_script_path, tmp_db_path],
+                             cwd=self._repo_root())
+        assert "AST vars" in proc.stdout, (
+            "Expected 'AST vars' in output. stdout: {}".format(proc.stdout)
+        )
+
+    # ------------------------------------------------------------------
+    # 'view' sub-command
+    # ------------------------------------------------------------------
+
+    def test_view_exits_zero_on_success(self, sample_script_path, tmp_db_path):
+        proc = self._run_cli(["view", sample_script_path, tmp_db_path],
+                             cwd=self._repo_root())
+        assert proc.returncode == 0, (
+            "Expected exit 0, got {}. stdout: {} stderr: {}".format(
+                proc.returncode, proc.stdout, proc.stderr)
+        )
+
+    def test_view_stdout_contains_pipeline_ok(self, sample_script_path, tmp_db_path):
+        proc = self._run_cli(["view", sample_script_path, tmp_db_path],
+                             cwd=self._repo_root())
+        assert "Pipeline OK" in proc.stdout, (
+            "Expected 'Pipeline OK' in output. stdout: {}".format(proc.stdout)
+        )
+
+    def test_view_stdout_contains_timeline(self, sample_script_path, tmp_db_path):
+        proc = self._run_cli(["view", sample_script_path, tmp_db_path],
+                             cwd=self._repo_root())
+        assert "Timeline" in proc.stdout, (
+            "Expected 'Timeline' in output. stdout: {}".format(proc.stdout)
+        )
+
+    def test_view_stdout_contains_code_viewer(self, sample_script_path, tmp_db_path):
+        proc = self._run_cli(["view", sample_script_path, tmp_db_path],
+                             cwd=self._repo_root())
+        assert "Code Viewer" in proc.stdout, (
+            "Expected '[Code Viewer]' in output. stdout: {}".format(proc.stdout)
+        )
+
+    def test_view_stdout_contains_variable_panel(self, sample_script_path, tmp_db_path):
+        proc = self._run_cli(["view", sample_script_path, tmp_db_path],
+                             cwd=self._repo_root())
+        assert "Variable Panel" in proc.stdout, (
+            "Expected '[Variable Panel]' in output. stdout: {}".format(proc.stdout)
+        )
+
+    def test_view_exits_two_on_missing_script(self, tmp_db_path, tmp_path):
+        missing = str(tmp_path / "no_such_file.py")
+        proc = self._run_cli(["view", missing, tmp_db_path],
+                             cwd=self._repo_root())
+        assert proc.returncode == 2, (
+            "Expected exit 2 for missing script, got {}. stdout: {}".format(
+                proc.returncode, proc.stdout)
+        )
+
+    # ------------------------------------------------------------------
+    # Argument parsing / usage errors
+    # ------------------------------------------------------------------
+
+    def test_no_args_exits_nonzero(self):
+        proc = self._run_cli([], cwd=self._repo_root())
+        assert proc.returncode != 0, (
+            "Expected non-zero exit when no arguments are given"
+        )
+
+    def test_unknown_command_exits_nonzero(self):
+        proc = self._run_cli(["unknown_cmd"], cwd=self._repo_root())
+        assert proc.returncode != 0, (
+            "Expected non-zero exit for unknown sub-command"
+        )
+
+    def test_help_flag_exits_zero(self):
+        proc = self._run_cli(["--help"], cwd=self._repo_root())
+        assert proc.returncode == 0, (
+            "Expected exit 0 for --help, got {}".format(proc.returncode)
+        )
+
+    def test_run_help_exits_zero(self):
+        proc = self._run_cli(["run", "--help"], cwd=self._repo_root())
+        assert proc.returncode == 0, (
+            "Expected exit 0 for 'run --help', got {}".format(proc.returncode)
+        )
+
+    def test_view_help_exits_zero(self):
+        proc = self._run_cli(["view", "--help"], cwd=self._repo_root())
+        assert proc.returncode == 0, (
+            "Expected exit 0 for 'view --help', got {}".format(proc.returncode)
+        )

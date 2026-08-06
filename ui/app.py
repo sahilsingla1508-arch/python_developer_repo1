@@ -282,7 +282,7 @@ def run_viewer(script_path: str, db_path: str = "chronicle.db") -> dict:
     raw_count = len(raw_events)
     comp_count = len(compressed)
     ratio = raw_count / comp_count if comp_count > 0 else 1.0
-    print(f"Delta compression : {raw_count} raw events → {comp_count} compressed "
+    print(f"Delta compression : {raw_count} raw events -> {comp_count} compressed "
           f"(ratio {ratio:.2f}x)")
     print()
 

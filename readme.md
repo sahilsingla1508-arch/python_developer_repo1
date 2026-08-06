@@ -51,6 +51,41 @@ Event count : 14
 ==================================================
 ```
 
+## Unified CLI (Week 4)
+
+A unified `python -m pychronicle` entry point (`pychronicle/__main__.py`)
+consolidates the pipeline and viewer into a single, polished CLI.
+
+**Run the pipeline only:**
+
+```bash
+python -m pychronicle run examples/sample_script.py
+python -m pychronicle run examples/sample_script.py my_trace.db
+```
+
+**Run the pipeline and display the full timeline view:**
+
+```bash
+python -m pychronicle view examples/sample_script.py
+python -m pychronicle view examples/sample_script.py my_trace.db
+```
+
+**Show help:**
+
+```bash
+python -m pychronicle --help
+python -m pychronicle run --help
+python -m pychronicle view --help
+```
+
+**Exit codes:**
+
+| Code | Meaning |
+|------|---------|
+| 0 | Success |
+| 1 | Usage error / missing argument |
+| 2 | Pipeline failure (missing script, runtime error, etc.) |
+
 ## Run the UI/Data Integration Demo
 
 `ui/app.py` provides the integration adapter (`ChronicleDataAdapter`,
@@ -80,7 +115,7 @@ python -m pytest
 All tests should pass:
 
 ```
-57 passed
+91 passed
 ```
 
 Run verbosely:
@@ -93,7 +128,7 @@ Run specific suites:
 
 ```bash
 python -m pytest tests/test_ast.py -v        # AST parser unit tests
-python -m pytest tests/test_pipeline.py -v   # Integration + UI tests
+python -m pytest tests/test_pipeline.py -v   # Integration + UI + CLI tests
 ```
 
 ## Mid Review Demo Procedure
@@ -130,12 +165,15 @@ Verify: All 57 tests pass.
 ## Project Structure
 
 ```
-ast_parser.py          # AST analysis — detect variable assignments
-tracer.py              # sys.settrace tracer — capture runtime variable changes
+ast_parser.py          # AST analysis -- detect variable assignments
+tracer.py              # sys.settrace tracer -- capture runtime variable changes
 storage.py             # SQLite schema reference (events table)
 executor.py            # Python script execution engine
 pipeline/
-  runner.py            # Integration glue: AST → trace → SQLite (run_pipeline)
+  runner.py            # Integration glue: AST -> trace -> SQLite (run_pipeline)
+  delta.py             # Delta-compression utilities (compress_events, replay_compressed)
+pychronicle/
+  __main__.py          # Unified CLI entry point: python -m pychronicle run/view
 ui/
   app.py               # UI/data integration adapter: ChronicleDataAdapter,
                        #   timeline_select(), run_viewer() (terminal demo).
@@ -145,8 +183,8 @@ examples/
 tests/
   conftest.py          # Shared pytest fixtures
   test_ast.py          # AST parser unit tests (15 tests)
-  test_pipeline.py     # End-to-end pipeline + UI integration tests (42 tests)
-NOTES.md               # Week 1 compatibility notes (AST ↔ storage field mapping)
+  test_pipeline.py     # End-to-end pipeline + UI + CLI integration tests (76 tests)
+NOTES.md               # Week 1 compatibility notes (AST <-> storage field mapping)
 requirements.txt       # Python dependencies
 pytest.ini             # pytest configuration
 ```

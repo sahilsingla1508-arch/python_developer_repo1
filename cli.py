@@ -1,5 +1,6 @@
 import typer
 from pipeline import run_pipeline
+from storage import get_connection, get_events
 
 app = typer.Typer(
     help="PyChronicle - AST Powered Time Travel Debugger"
@@ -21,6 +22,29 @@ def run(script: str):
 
     typer.echo("Tracing completed.")
     typer.echo(f"Static Variables: {variables}")
+
+
+@app.command()
+def replay(db: str = "chronicle.db"):
+    """
+    Replay all recorded trace events.
+    """
+
+    typer.echo(f"Reading trace from {db}...\n")
+
+    with get_connection(db) as conn:
+        events = get_events(conn)
+
+    if not events:
+        typer.echo("No trace events found.")
+        return
+
+    for event in events:
+        _, timestamp, step, line, variable, value = event
+
+        typer.echo(
+            f"Step {step} | Line {line} | {variable} = {value}"
+        )
 
 
 if __name__ == "__main__":

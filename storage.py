@@ -1,35 +1,142 @@
 import sqlite3
+from contextlib import contextmanager
 
-# Connect to (and create) the database file
-conn = sqlite3.connect("chronicle.db")
-cursor = conn.cursor()
 
-# Create the table with the required columns
-cursor.execute("""
-CREATE TABLE IF NOT EXISTS events (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    timestamp TEXT NOT NULL,
-    line_number INTEGER NOT NULL,
-    variable_name TEXT NOT NULL,
-    serialized_value TEXT NOT NULL
-)
-""")
+def init_db(db_path: str = "chronicle.db"):
+    """Creates the events table if it doesn't exist. Returns a connection."""
+    conn = sqlite3.connect(db_path)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS events (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            timestamp TEXT NOT NULL,
+            step_number INTEGER NOT NULL,
+            line_number INTEGER NOT NULL,
+            variable_name TEXT NOT NULL,
+            serialized_value TEXT NOT NULL
+        )
+    """)
+    conn.commit()
+    return conn
 
-# Insert a test row
-cursor.execute("""
-INSERT INTO events (timestamp, line_number, variable_name, serialized_value)
-VALUES (?, ?, ?, ?)
-""", ("2026-07-11 10:00:00", 1, "name", "Tejas"))
 
-# Save changes
-conn.commit()
+@contextmanager
+def get_connection(db_path: str = "chronicle.db"):
+    conn = sqlite3.connect(db_path)
+    try:
+        yield conn
+    finally:
+        conn.close()
 
-# Read back and print all rows to confirm it worked
-cursor.execute("SELECT * FROM events")
-rows = cursor.fetchall()
-print("Current data in the table:")
-for row in rows:
-    print(row)
 
-conn.close()
-print("Database created and tested successfully!")
+def insert_event(conn, timestamp, step_number, line_number, variable_name, serialized_value):
+    conn.execute(
+        "INSERT INTO events (timestamp, step_number, line_number, variable_name, serialized_value) "
+        "VALUES (?, ?, ?, ?, ?)",
+        (
+            timestamp,
+            step_number,
+            line_number,
+            variable_name,
+            serialized_value,
+        ),
+    )
+
+
+def get_events(conn):
+    return conn.execute("SELECT * FROM events ORDER BY id").fetchall()
+
+
+def get_event_by_step(conn, step_number):
+    """
+    Returns all variable updates that occurred
+    at a particular execution step.
+    """
+    return conn.execute(
+        """
+        SELECT *
+        FROM events
+        WHERE step_number = ?
+        """,
+        (step_number,),
+    ).fetchall()
+
+
+def get_variable_history(conn, variable_name):
+    """
+    Returns every change recorded
+    for a specific variable.
+    """
+    return conn.execute(
+        """
+        SELECT *
+        FROM events
+        WHERE variable_name = ?
+        ORDER BY step_number
+        """,
+        (variable_name,),
+    ).fetchall()
+
+
+def get_total_steps(conn):
+    """
+    Returns total execution steps.
+    """
+
+    result = conn.execute(
+        """
+        SELECT MAX(step_number)
+        FROM events
+        """
+    ).fetchone()
+
+    return result[0] if result[0] else 0
+
+
+def get_trace_statistics(conn):
+    """
+    Returns basic statistics about the trace.
+    """
+
+    total_events = conn.execute(
+        "SELECT COUNT(*) FROM events"
+    ).fetchone()[0]
+
+    unique_variables = conn.execute(
+        "SELECT COUNT(DISTINCT variable_name) FROM events"
+    ).fetchone()[0]
+
+    total_steps = conn.execute(
+        "SELECT MAX(step_number) FROM events"
+    ).fetchone()[0]
+
+    return {
+        "events": total_events,
+        "variables": unique_variables,
+        "steps": total_steps or 0,
+    }
+
+
+def clear_events(conn):
+    conn.execute("DELETE FROM events")
+    conn.commit()
+
+
+if __name__ == "__main__":
+    # Manual test — only runs when you execute this file directly
+    conn = init_db()
+    insert_event(conn, "2026-07-22 10:00:00", 1, 1, "test", "123")
+
+    print("All Events")
+    print(get_events(conn))
+
+    print()
+
+    print("Variable History")
+    print(get_variable_history(conn, "test"))
+
+    print()
+
+    print("Total Steps")
+    print(get_total_steps(conn))
+
+    conn.close()

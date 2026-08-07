@@ -1,6 +1,7 @@
 import typer
 from pipeline import run_pipeline
 from storage import get_connection, get_events, get_variable_history, get_trace_statistics
+from exporter import export_json
 
 app = typer.Typer(
     help="PyChronicle - AST Powered Time Travel Debugger"
@@ -84,6 +85,20 @@ def stats(db: str = "chronicle.db"):
     typer.echo(f"Total Events : {stats['events']}")
     typer.echo(f"Variables    : {stats['variables']}")
     typer.echo(f"Steps        : {stats['steps']}")
+
+
+@app.command()
+def export(
+    output: str = "trace.json",
+    db: str = "chronicle.db",
+):
+    """
+    Export trace to JSON.
+    """
+
+    export_json(db, output)
+
+    typer.echo(f"Trace exported to {output}")
 
 
 if __name__ == "__main__":

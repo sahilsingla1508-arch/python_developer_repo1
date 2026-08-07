@@ -32,9 +32,14 @@ def insert_event(conn, timestamp, step_number, line_number, variable_name, seria
     conn.execute(
         "INSERT INTO events (timestamp, step_number, line_number, variable_name, serialized_value) "
         "VALUES (?, ?, ?, ?, ?)",
-        (timestamp, step_number, line_number, variable_name, serialized_value),
+        (
+            timestamp,
+            step_number,
+            line_number,
+            variable_name,
+            serialized_value,
+        ),
     )
-    conn.commit()
 
 
 def get_events(conn):

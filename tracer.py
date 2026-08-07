@@ -105,6 +105,8 @@ def run_with_trace(filename: str, conn):
             "completed",
         )
 
+    conn.commit()
+
 
 if __name__ == "__main__":
     from storage import init_db

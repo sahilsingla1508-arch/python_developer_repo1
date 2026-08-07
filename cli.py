@@ -1,6 +1,6 @@
 import typer
 from pipeline import run_pipeline
-from storage import get_connection, get_events, get_variable_history
+from storage import get_connection, get_events, get_variable_history, get_trace_statistics
 
 app = typer.Typer(
     help="PyChronicle - AST Powered Time Travel Debugger"
@@ -68,6 +68,22 @@ def watch(variable: str, db: str = "chronicle.db"):
         typer.echo(
             f"Step {step} | Line {line} | {variable_name} = {value}"
         )
+
+
+@app.command()
+def stats(db: str = "chronicle.db"):
+    """
+    Display trace statistics.
+    """
+
+    with get_connection(db) as conn:
+        stats = get_trace_statistics(conn)
+
+    typer.echo("\nTrace Statistics\n")
+
+    typer.echo(f"Total Events : {stats['events']}")
+    typer.echo(f"Variables    : {stats['variables']}")
+    typer.echo(f"Steps        : {stats['steps']}")
 
 
 if __name__ == "__main__":

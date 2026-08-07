@@ -92,6 +92,30 @@ def get_total_steps(conn):
     return result[0] if result[0] else 0
 
 
+def get_trace_statistics(conn):
+    """
+    Returns basic statistics about the trace.
+    """
+
+    total_events = conn.execute(
+        "SELECT COUNT(*) FROM events"
+    ).fetchone()[0]
+
+    unique_variables = conn.execute(
+        "SELECT COUNT(DISTINCT variable_name) FROM events"
+    ).fetchone()[0]
+
+    total_steps = conn.execute(
+        "SELECT MAX(step_number) FROM events"
+    ).fetchone()[0]
+
+    return {
+        "events": total_events,
+        "variables": unique_variables,
+        "steps": total_steps or 0,
+    }
+
+
 def clear_events(conn):
     conn.execute("DELETE FROM events")
     conn.commit()

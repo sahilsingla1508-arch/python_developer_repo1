@@ -9,6 +9,7 @@ def init_db(db_path: str = "chronicle.db"):
         CREATE TABLE IF NOT EXISTS events (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             timestamp TEXT NOT NULL,
+            step_number INTEGER NOT NULL,
             line_number INTEGER NOT NULL,
             variable_name TEXT NOT NULL,
             serialized_value TEXT NOT NULL
@@ -27,11 +28,11 @@ def get_connection(db_path: str = "chronicle.db"):
         conn.close()
 
 
-def insert_event(conn, timestamp, line_number, variable_name, serialized_value):
+def insert_event(conn, timestamp, step_number, line_number, variable_name, serialized_value):
     conn.execute(
-        "INSERT INTO events (timestamp, line_number, variable_name, serialized_value) "
-        "VALUES (?, ?, ?, ?)",
-        (timestamp, line_number, variable_name, serialized_value),
+        "INSERT INTO events (timestamp, step_number, line_number, variable_name, serialized_value) "
+        "VALUES (?, ?, ?, ?, ?)",
+        (timestamp, step_number, line_number, variable_name, serialized_value),
     )
     conn.commit()
 
@@ -48,6 +49,6 @@ def clear_events(conn):
 if __name__ == "__main__":
     # Manual test — only runs when you execute this file directly
     conn = init_db()
-    insert_event(conn, "2026-07-22 10:00:00", 1, "test", "123")
+    insert_event(conn, "2026-07-22 10:00:00", 1, 1, "test", "123")
     print(get_events(conn))
     conn.close()

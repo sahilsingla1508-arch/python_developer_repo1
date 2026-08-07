@@ -13,7 +13,9 @@ def make_tracer(conn, state=None):
         state = {}
     prev_values = {}
     last_line = {"value": None}
+    step_counter = {"value": 0}
     state["last_line"] = last_line  # expose so run_with_trace can read it later
+    state["step_counter"] = step_counter
 
     def trace_lines(frame, event, arg):
         if event == "line":
@@ -35,10 +37,13 @@ def make_tracer(conn, state=None):
                     last_line["value"] if last_line["value"] is not None else current_line
                 )
 
+                step_counter["value"] += 1
+
                 timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                 insert_event(
                     conn,
                     timestamp,
+                    step_counter["value"],
                     line_to_record,
                     var_name,
                     serialize_value(value),
@@ -87,8 +92,18 @@ def run_with_trace(filename: str, conn):
     # marker so the timeline can reach it.
     last_line_seen = state.get("last_line", {}).get("value")
     if last_line_seen is not None:
+        step_counter = state.setdefault("step_counter", {"value": 0})
+        step_counter["value"] += 1
+
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        insert_event(conn, timestamp, last_line_seen, "__script_end__", "completed")
+        insert_event(
+            conn,
+            timestamp,
+            step_counter["value"],
+            last_line_seen,
+            "__script_end__",
+            "completed",
+        )
 
 
 if __name__ == "__main__":

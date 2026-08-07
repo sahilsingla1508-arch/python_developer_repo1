@@ -1,6 +1,6 @@
 import typer
 from pipeline import run_pipeline
-from storage import get_connection, get_events
+from storage import get_connection, get_events, get_variable_history
 
 app = typer.Typer(
     help="PyChronicle - AST Powered Time Travel Debugger"
@@ -44,6 +44,29 @@ def replay(db: str = "chronicle.db"):
 
         typer.echo(
             f"Step {step} | Line {line} | {variable} = {value}"
+        )
+
+
+@app.command()
+def watch(variable: str, db: str = "chronicle.db"):
+    """
+    Show the history of a single variable.
+    """
+
+    with get_connection(db) as conn:
+        history = get_variable_history(conn, variable)
+
+    if not history:
+        typer.echo(f"No history found for '{variable}'.")
+        raise typer.Exit()
+
+    typer.echo(f"\nHistory for variable: {variable}\n")
+
+    for event in history:
+        _, timestamp, step, line, variable_name, value = event
+
+        typer.echo(
+            f"Step {step} | Line {line} | {variable_name} = {value}"
         )
 
 

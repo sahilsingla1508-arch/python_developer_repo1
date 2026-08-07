@@ -1,5 +1,6 @@
 import sys
 import copy
+import json
 from datetime import datetime
 from storage import insert_event
 
@@ -35,13 +36,28 @@ def make_tracer(conn, state=None):
                 )
 
                 timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                insert_event(conn, timestamp, line_to_record, var_name, str(value))
+                insert_event(
+                    conn,
+                    timestamp,
+                    line_to_record,
+                    var_name,
+                    serialize_value(value),
+                )
 
             last_line["value"] = current_line
 
         return trace_lines
 
     return trace_lines
+
+
+def serialize_value(value):
+    """Convert a value to a string for storage, using JSON when possible
+    for cleaner structured output, falling back to str() otherwise."""
+    try:
+        return json.dumps(value)
+    except (TypeError, ValueError):
+        return str(value)
 
 
 def _is_deepcopyable(value):

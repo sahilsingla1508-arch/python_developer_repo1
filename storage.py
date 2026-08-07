@@ -46,6 +46,52 @@ def get_events(conn):
     return conn.execute("SELECT * FROM events ORDER BY id").fetchall()
 
 
+def get_event_by_step(conn, step_number):
+    """
+    Returns all variable updates that occurred
+    at a particular execution step.
+    """
+    return conn.execute(
+        """
+        SELECT *
+        FROM events
+        WHERE step_number = ?
+        """,
+        (step_number,),
+    ).fetchall()
+
+
+def get_variable_history(conn, variable_name):
+    """
+    Returns every change recorded
+    for a specific variable.
+    """
+    return conn.execute(
+        """
+        SELECT *
+        FROM events
+        WHERE variable_name = ?
+        ORDER BY step_number
+        """,
+        (variable_name,),
+    ).fetchall()
+
+
+def get_total_steps(conn):
+    """
+    Returns total execution steps.
+    """
+
+    result = conn.execute(
+        """
+        SELECT MAX(step_number)
+        FROM events
+        """
+    ).fetchone()
+
+    return result[0] if result[0] else 0
+
+
 def clear_events(conn):
     conn.execute("DELETE FROM events")
     conn.commit()
@@ -55,5 +101,18 @@ if __name__ == "__main__":
     # Manual test — only runs when you execute this file directly
     conn = init_db()
     insert_event(conn, "2026-07-22 10:00:00", 1, 1, "test", "123")
+
+    print("All Events")
     print(get_events(conn))
+
+    print()
+
+    print("Variable History")
+    print(get_variable_history(conn, "test"))
+
+    print()
+
+    print("Total Steps")
+    print(get_total_steps(conn))
+
     conn.close()

@@ -115,7 +115,7 @@ python -m pytest
 All tests should pass:
 
 ```
-91 passed
+97 passed
 ```
 
 Run verbosely:
@@ -160,7 +160,7 @@ requires the Textual UI, which is a pending teammate deliverable.)
 python -m pytest
 ```
 
-Verify: All 57 tests pass.
+Verify: All 97 tests pass.
 
 ## Project Structure
 
@@ -183,7 +183,7 @@ examples/
 tests/
   conftest.py          # Shared pytest fixtures
   test_ast.py          # AST parser unit tests (15 tests)
-  test_pipeline.py     # End-to-end pipeline + UI + CLI integration tests (76 tests)
+  test_pipeline.py     # End-to-end pipeline + UI + CLI integration tests (82 tests)
 NOTES.md               # Week 1 compatibility notes (AST <-> storage field mapping)
 requirements.txt       # Python dependencies
 pytest.ini             # pytest configuration

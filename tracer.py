@@ -1,5 +1,6 @@
 import sys
 import copy
+import json
 from datetime import datetime
 from storage import insert_event
 
@@ -12,7 +13,9 @@ def make_tracer(conn, state=None):
         state = {}
     prev_values = {}
     last_line = {"value": None}
+    step_counter = {"value": 0}
     state["last_line"] = last_line  # expose so run_with_trace can read it later
+    state["step_counter"] = step_counter
 
     def trace_lines(frame, event, arg):
         if event == "line":
@@ -34,14 +37,32 @@ def make_tracer(conn, state=None):
                     last_line["value"] if last_line["value"] is not None else current_line
                 )
 
+                step_counter["value"] += 1
+
                 timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                insert_event(conn, timestamp, line_to_record, var_name, str(value))
+                insert_event(
+                    conn,
+                    timestamp,
+                    step_counter["value"],
+                    line_to_record,
+                    var_name,
+                    serialize_value(value),
+                )
 
             last_line["value"] = current_line
 
         return trace_lines
 
     return trace_lines
+
+
+def serialize_value(value):
+    """Convert a value to a string for storage, using JSON when possible
+    for cleaner structured output, falling back to str() otherwise."""
+    try:
+        return json.dumps(value)
+    except (TypeError, ValueError):
+        return str(value)
 
 
 def _is_deepcopyable(value):
@@ -71,8 +92,20 @@ def run_with_trace(filename: str, conn):
     # marker so the timeline can reach it.
     last_line_seen = state.get("last_line", {}).get("value")
     if last_line_seen is not None:
+        step_counter = state.setdefault("step_counter", {"value": 0})
+        step_counter["value"] += 1
+
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        insert_event(conn, timestamp, last_line_seen, "__script_end__", "completed")
+        insert_event(
+            conn,
+            timestamp,
+            step_counter["value"],
+            last_line_seen,
+            "__script_end__",
+            "completed",
+        )
+
+    conn.commit()
 
 
 if __name__ == "__main__":

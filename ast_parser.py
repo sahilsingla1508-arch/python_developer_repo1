@@ -115,7 +115,7 @@ def _collect_names(
     elif isinstance(target, (ast.Tuple, ast.List)):
         for elt in target.elts:
             _collect_names(elt, lineno, out_list)
-            
+
 
 def export_assignments(tree: ast.Module) -> list[dict]:
     """

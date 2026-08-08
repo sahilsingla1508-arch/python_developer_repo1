@@ -1,16 +1,39 @@
 # PyChronicle
 
-PyChronicle is an AST-powered time-travel debugger for Python.
-
-It traces a Python script execution, captures every variable change as a
-timestamped SQLite event, and provides a data integration layer that maps
-each recorded event to the corresponding source line and variable state.
+PyChronicle is an AST-powered time-travel debugger for Python that allows users
+to visualize program execution line by line. The project combines static code
+analysis using Python's AST module with runtime tracing (`sys.settrace`), SQLite
+event storage, and a Textual-based terminal UI to provide an interactive
+debugging experience.
 
 ## Pipeline
 
 ```
 Script → AST analysis → sys.settrace → SQLite storage → UI/data integration layer
 ```
+
+Full project workflow:
+
+```
+Python Script
+      │
+      ▼
+ AST Parser
+      │
+      ▼
+ Variable Detection
+      │
+      ▼
+ Runtime Tracer (sys.settrace)
+      │
+      ▼
+ SQLite Storage
+      │
+      ▼
+ Textual User Interface
+```
+
+---
 
 ## Requirements
 
@@ -22,6 +45,8 @@ Install dependencies:
 ```bash
 pip install -r requirements.txt
 ```
+
+---
 
 ## Run the Pipeline
 
@@ -50,6 +75,20 @@ AST vars    : [{"line_number": 10, "variable_name": "x"}, ...]
 Event count : 14
 ==================================================
 ```
+
+Alternatively, run via the root-level pipeline module:
+
+```bash
+python main.py sample_1.py
+```
+
+or
+
+```bash
+python main.py sample_2.py
+```
+
+---
 
 ## Unified CLI (Week 4)
 
@@ -86,6 +125,8 @@ python -m pychronicle view --help
 | 1 | Usage error / missing argument |
 | 2 | Pipeline failure (missing script, runtime error, etc.) |
 
+---
+
 ## Run the UI/Data Integration Demo
 
 `ui/app.py` provides the integration adapter (`ChronicleDataAdapter`,
@@ -106,6 +147,8 @@ For each recorded event the output shows:
 - **Code Viewer** — all source lines with `>>>` marking the event's line
 - **Variable Panel** — accumulated variable state at that point in execution
 
+---
+
 ## Run Tests
 
 ```bash
@@ -115,7 +158,7 @@ python -m pytest
 All tests should pass:
 
 ```
-97 passed
+101 passed
 ```
 
 Run verbosely:
@@ -130,6 +173,8 @@ Run specific suites:
 python -m pytest tests/test_ast.py -v        # AST parser unit tests
 python -m pytest tests/test_pipeline.py -v   # Integration + UI + CLI tests
 ```
+
+---
 
 ## Mid Review Demo Procedure
 
@@ -160,34 +205,91 @@ requires the Textual UI, which is a pending teammate deliverable.)
 python -m pytest
 ```
 
-Verify: All 97 tests pass.
+Verify: All 101 tests pass.
+
+---
+
+## Core Features
+
+### AST Module
+
+- Parse Python source files
+- Traverse AST using `ast.NodeVisitor`
+- Detect variable assignments (Assign, AugAssign, AnnAssign)
+- Store line numbers
+- Handle edge cases (tuple unpacking, nested functions)
+
+### Tracer Module
+
+- Runtime execution tracing via `sys.settrace`
+- Capture executed lines with step counters
+- Detect variable value changes (delta tracking with deepcopy)
+- Filter internal (`__dunder__`) variables
+- Generate timestamped execution events
+
+### Storage Module
+
+- SQLite event database with `step_number` tracking
+- Store and retrieve execution history
+- Query variable history by name
+- Retrieve events by step number
+- Trace statistics (total events, unique variables, total steps)
+- Context-manager connection helper
+
+### UI Module
+
+- Code Viewer (highlighted active line)
+- Variable Panel (accumulated variable state)
+- Timeline navigation
+- Terminal-based interface using Textual
+
+### Pipeline
+
+- Complete integration between all modules: AST → Tracer → Storage → UI
+- Integration adapter (`ChronicleDataAdapter`, `timeline_select`)
+- Delta compression for replay (`compress_events`, `replay_compressed`)
+
+---
 
 ## Project Structure
 
 ```
 ast_parser.py          # AST analysis -- detect variable assignments
 tracer.py              # sys.settrace tracer -- capture runtime variable changes
-storage.py             # SQLite schema reference (events table)
+storage.py             # SQLite schema and query API (events table)
+variable_detector.py   # AST node visitor for variable detection
 executor.py            # Python script execution engine
 pipeline/
   runner.py            # Integration glue: AST -> trace -> SQLite (run_pipeline)
   delta.py             # Delta-compression utilities (compress_events, replay_compressed)
+pipeline.py            # Root-level pipeline entry (run via main.py)
 pychronicle/
   __main__.py          # Unified CLI entry point: python -m pychronicle run/view
 ui/
   app.py               # UI/data integration adapter: ChronicleDataAdapter,
                        #   timeline_select(), run_viewer() (terminal demo).
-                       #   Interactive Textual UI is a pending teammate deliverable.
+app.py                 # Textual application entry point
+code_viewer.py         # Code viewer Textual widget
+variable_panel.py      # Variable panel Textual widget
+timeline.py            # Timeline Textual widget
+styles.tcss            # Textual CSS styles
+cli.py                 # Typer-based CLI (run/replay/watch/stats/export)
+exporter.py            # JSON trace exporter
 examples/
   sample_script.py     # Deterministic demo script for integration tests
+sample_1.py            # Sample script 1
+sample_2.py            # Sample script 2
 tests/
   conftest.py          # Shared pytest fixtures
-  test_ast.py          # AST parser unit tests (15 tests)
+  test_ast.py          # AST parser unit tests (19 tests)
   test_pipeline.py     # End-to-end pipeline + UI + CLI integration tests (82 tests)
 NOTES.md               # Week 1 compatibility notes (AST <-> storage field mapping)
+INTEGRATION.md         # Integration developer handoff document
 requirements.txt       # Python dependencies
 pytest.ini             # pytest configuration
 ```
+
+---
 
 ## Tech Stack
 
@@ -195,4 +297,41 @@ pytest.ini             # pytest configuration
 - `ast` — static variable detection
 - `sys.settrace` — runtime line tracing
 - `sqlite3` — event persistence
+- `textual` / `rich` — terminal UI framework
+- `typer` — CLI framework
 - `pytest` — test suite
+
+---
+
+## Mid Review Deliverables
+
+- ✅ AST Module Working
+- ✅ Variable Detection Working
+- ✅ Runtime Tracing
+- ✅ SQLite Integration
+- ✅ Textual UI Skeleton
+- ✅ Timeline Interface
+- ✅ End-to-End Pipeline
+- ✅ Integration Tests
+- ✅ Unified CLI (`python -m pychronicle`)
+- ✅ Delta compression / replay pipeline
+
+---
+
+## Future Enhancements
+
+- Reverse execution support
+- Advanced execution visualization
+- Breakpoints
+- Function call tracing
+- Export execution timeline
+- Performance optimization
+
+---
+
+## Authors
+
+- Prateek Sharma
+- Tejas
+- Sahil
+- Varad

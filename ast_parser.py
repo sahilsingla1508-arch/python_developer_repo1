@@ -1,12 +1,32 @@
+"""
+AST Parser Module
+
+This module parses Python source code using Python's built-in `ast` module.
+It detects variable assignments and exports them in a JSON-serializable format
+for downstream modules.
+
+Features:
+- Parse Python source files
+- Detect variable assignments
+- Support Assign, AugAssign, and AnnAssign nodes
+- Export assignment information as JSON-ready data
+"""
+
 import ast
 import json
 
 
 def parse_file(filepath: str) -> ast.Module:
     """
-    Read a Python file and return its AST.
+    Read a Python source file and return its Abstract Syntax Tree (AST).
+
+    Args:
+        filepath: Path to the Python source file.
+
+    Returns:
+        Parsed AST module.
     """
-    with open(filepath, "r") as f:
+    with open(filepath, "r", encoding="utf-8") as f:
         source_code = f.read()
 
     tree = ast.parse(source_code, filename=filepath)
@@ -15,7 +35,12 @@ def parse_file(filepath: str) -> ast.Module:
 
 def print_node_types(tree: ast.Module) -> None:
     """
-    Print every node type with its line number.
+    Print every AST node type along with its corresponding line number.
+
+    Useful for debugging and understanding the structure of parsed code.
+
+    Args:
+        tree: Parsed AST module.
     """
     for node in ast.walk(tree):
         line = getattr(node, "lineno", "?")
@@ -24,12 +49,26 @@ def print_node_types(tree: ast.Module) -> None:
 
 def find_assignments(tree: ast.Module) -> list[tuple[int, str]]:
     """
-    Find all variable assignments.
+    Traverse the AST and collect all variable assignments.
+
+    Supported node types:
+    - Assign
+    - AugAssign
+    - AnnAssign
+
+    Args:
+        tree: Parsed AST module.
+
     Returns:
+        A list of tuples in the format:
+
+            (line_number, variable_name)
+
+    Example:
+
         [
             (2, "total"),
-            (3, "count"),
-            ...
+            (3, "count")
         ]
     """
     assignments = []
@@ -51,9 +90,23 @@ def find_assignments(tree: ast.Module) -> list[tuple[int, str]]:
     return assignments
 
 
-def _collect_names(target, lineno, out_list):
+def _collect_names(
+    target: ast.AST,
+    lineno: int,
+    out_list: list[tuple[int, str]],
+) -> None:
     """
-    Collect variable names from assignment targets.
+    Recursively extract variable names from assignment targets.
+
+    Supports:
+    - Single variable assignments
+    - Tuple unpacking
+    - List unpacking
+
+    Args:
+        target: AST assignment target.
+        lineno: Line number of assignment.
+        out_list: List used to collect detected variables.
     """
 
     if isinstance(target, ast.Name):
@@ -62,23 +115,26 @@ def _collect_names(target, lineno, out_list):
     elif isinstance(target, (ast.Tuple, ast.List)):
         for elt in target.elts:
             _collect_names(elt, lineno, out_list)
-
-
-# ----------------------------
-# NEW FUNCTION
-# ----------------------------
+            
 
 def export_assignments(tree: ast.Module) -> list[dict]:
     """
     Convert detected assignments into JSON-serializable dictionaries.
 
-    Example Output:
-    [
-        {
-            "line_number": 2,
-            "variable_name": "total"
-        }
-    ]
+    Args:
+        tree: Parsed AST module.
+
+    Returns:
+        List of dictionaries.
+
+    Example:
+
+        [
+            {
+                "line_number": 2,
+                "variable_name": "total"
+            }
+        ]
     """
 
     assignments = find_assignments(tree)
@@ -99,9 +155,16 @@ def export_assignments(tree: ast.Module) -> list[dict]:
 
 def analyze(filepath: str) -> list[dict]:
     """
-    Main API for downstream modules.
+    High-level API for the AST parser.
 
-    Returns JSON-serializable data.
+    Reads a Python source file, detects assignments,
+    and returns JSON-ready data for downstream modules.
+
+    Args:
+        filepath: Path to the Python source file.
+
+    Returns:
+        List of assignment dictionaries.
     """
 
     tree = parse_file(filepath)

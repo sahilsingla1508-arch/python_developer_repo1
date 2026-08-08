@@ -1,74 +1,198 @@
 # PyChronicle
 
-PyChronicle is an AST-powered Time-Travel Debugger for Python.
+PyChronicle is an AST-powered Time-Travel Debugger for Python that allows users to visualize program execution line by line. The project combines static code analysis using Python's AST module with runtime tracing (`sys.settrace`), SQLite event storage, and a Textual-based terminal UI to provide an interactive debugging experience.
 
-## What is PyChronicle?
+---
 
-Normal Python debuggers only let you step forward through your code —
-if you miss the exact moment a variable changed incorrectly, you have
-to restart the whole program. PyChronicle records every variable's
-history while a script runs, so you can later "scrub" backward and
-forward through its execution — without re-running the code.
+# Mid Review Progress (Week 1 & Week 2)
 
-## Project Status
+## ✅ Core Features Implemented
 
-Currently implemented: **Week 1 — Foundations (AST Parsing & Storage Schema)**
+- AST parsing for Python source files
+- Variable detection with line number tracking
+- Runtime tracing using `sys.settrace`
+- Variable change detection during execution
+- SQLite database integration for execution events
+- End-to-end pipeline connecting AST → Tracer → Storage
+- Terminal-based UI using Textual
+- Code Viewer
+- Variable Panel
+- Timeline UI
+- Sample scripts for testing
+- Integration and edge-case tests
+- README updates and project documentation
 
-## Files in this repo
+---
 
-| File | What it does |
-|---|---|
-| `ast_parser.py` | Reads a Python file, builds its AST, and finds every variable assignment (`x = 1`, `x += 1`, `x: int = 1`) with its line number |
-| `storage.py` | Sets up a SQLite database (`state_log` table) to store each variable's value, tagged with a line number and a step/sequence counter |
-| `sample_1.py` | A simple test script (loop + variables) used to test the parser and tracer |
-| `sample_2.py` | A trickier test script (function + dictionary) used to make sure the parser doesn't crash on more complex code |
-| `test_ast_parser.py` | Unit test — confirms `find_assignments()` finds the correct variables in the correct order |
-| `test_integration_week1.py` | Integration test — confirms the parser and storage modules work together end to end |
+# Project Workflow
 
-## How it works (Week 1)
-
-1. `ast_parser.py` reads a `.py` file and turns it into an AST (Abstract
-   Syntax Tree) using Python's built-in `ast` module — this represents
-   the code's structure without running it.
-2. `find_assignments()` walks that tree and picks out every variable
-   assignment, returning a list of `(line_number, variable_name)` pairs.
-3. `storage.py` defines a SQLite table (`state_log`) designed to later
-   hold every variable's value at every point in time, indexed for fast
-   lookups by line number, variable name, and sequence order.
-4. The two modules are wired together and tested in
-   `test_integration_week1.py`, proving the assignment list can be
-   written into the database correctly.
-
-## Setup
-
-```bash
-python -m venv venv
-venv\Scripts\activate      # Windows
-pip install pytest
+```
+Python Script
+      │
+      ▼
+ AST Parser
+      │
+      ▼
+ Variable Detection
+      │
+      ▼
+ Runtime Tracer (sys.settrace)
+      │
+      ▼
+ SQLite Storage
+      │
+      ▼
+ Textual User Interface
 ```
 
-## Running
+---
 
-```bash
-# Run the AST parser on sample_1.py and see the output
-python ast_parser.py
+# Current Features
 
-# Run the storage module (creates pychronicle_test.db)
-python storage.py
+### AST Module
 
-# Run all tests
-pytest
+- Parse Python source files
+- Traverse AST using `ast.NodeVisitor`
+- Detect variable assignments
+- Store line numbers and column offsets
+- Handle edge cases
+
+### Tracer Module
+
+- Runtime execution tracing
+- Capture executed lines
+- Detect variable value changes
+- Filter external library calls
+- Generate execution events
+
+### Storage Module
+
+- SQLite event database
+- Store execution history
+- Retrieve timeline events
+- Query variable history
+
+### UI Module
+
+- Code Viewer
+- Variable Panel
+- Timeline Slider
+- Terminal-based interface using Textual
+
+### Pipeline
+
+- Complete integration between all modules
+- AST → Tracer → Storage → UI
+
+---
+
+# Tech Stack
+
+- Python 3
+- Python AST
+- sys.settrace
+- SQLite
+- Textual
+- Rich
+- Pytest
+
+---
+
+# Project Structure
+
+```
+PyChronicle/
+│
+├── app.py
+├── main.py
+├── pipeline.py
+├── ast_parser.py
+├── tracer.py
+├── storage.py
+├── code_viewer.py
+├── variable_detector.py
+├── variable_panel.py
+├── timeline.py
+├── styles.tcss
+├── chronicle.db
+├── tests/
+├── sample_1.py
+├── sample_2.py
+└── README.md
 ```
 
-## Milestone 1 — Complete ✅
+---
 
-A script that reads a target Python file, parses its AST, identifies
-every variable assignment, and a working SQLite schema ready to store
-chronological state.
+# Running the Project
 
-## Coming next (Week 2)
+Create virtual environment
 
-- `tracer.py` — uses `sys.settrace` to capture real variable values
-  while the script actually runs
-- `ui.py` — a Textual-based terminal UI scaffold with a code pane and
-  timeline area
+```bash
+python -m venv .venv
+```
+
+Activate
+
+```bash
+# Windows
+.venv\Scripts\activate
+```
+
+Install dependencies
+
+```bash
+pip install -r requirements.txt
+```
+
+Run application
+
+```bash
+python main.py sample_1.py
+```
+
+or
+
+```bash
+python main.py sample_2.py
+```
+
+---
+
+# Running Tests
+
+```bash
+pytest -v
+```
+
+---
+
+# Mid Review Deliverables
+
+- ✅ AST Module Working
+- ✅ Variable Detection Working
+- ✅ Runtime Tracing
+- ✅ SQLite Integration
+- ✅ Textual UI Skeleton
+- ✅ Timeline Interface
+- ✅ End-to-End Pipeline
+- ✅ Integration Tests
+
+---
+
+# Future Enhancements
+
+- Reverse execution support
+- Advanced execution visualization
+- Breakpoints
+- Function call tracing
+- Export execution timeline
+- Performance optimization
+
+---
+
+# Authors
+
+- Prateek Sharma
+- Tejas
+- Sahil
+- Varad

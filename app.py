@@ -39,9 +39,12 @@ class PyChronicleUI(App):
         self.title = "PyChronicle Debugger"
         self.refresh_ui()
 
-    def on_slider_changed(self, event: Slider.Changed) -> None:
-        if event.slider.id == "timeline-slider":
-            self.current_event_id = event.value
+    # def on_slider_changed(self, event: Slider.Changed) -> None:
+    #     if event.slider.id == "timeline-slider":
+    #         self.current_event_id = event.value
+    def on_slider_changed(self, event):
+        print("Slider moved:", event.value)
+        self.current_event_id = event.value
 
     def watch_current_event_id(self, new_id: int) -> None:
         self.refresh_ui()

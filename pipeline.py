@@ -23,7 +23,7 @@ def run_pipeline(script_path: str, db_path: str = "chronicle.db"):
 
 if __name__ == "__main__":
     import sys
-    script = sys.argv[1] if len(sys.argv) > 1 else "sample_2.py"
+    script = sys.argv[1] if len(sys.argv) > 1 else "sample2.py"
     result = run_pipeline(script)
     print("Static variables detected:", result)
     print("Pipeline complete. Check chronicle.db for traced events.")

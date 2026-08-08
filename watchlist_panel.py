@@ -1,9 +1,12 @@
 import ast
+
 from textual.widgets import SelectionList
 from textual.widgets.selection_list import Selection
 
+
 class VariableDetector(ast.NodeVisitor):
-    """Traverses Python AST to extract all declared variable targets."""
+    """Extract variable names assigned in the target Python script."""
+
     def __init__(self):
         self.variables = set()
 
@@ -11,25 +14,45 @@ class VariableDetector(ast.NodeVisitor):
         for target in node.targets:
             if isinstance(target, ast.Name):
                 self.variables.add(target.id)
+
         self.generic_visit(node)
 
+
 class WatchlistPanel(SelectionList):
-    """Interactive Checkbox selection panel for filtering tracked variables."""
+    """Interactive checklist for selecting variables to watch."""
+
     def __init__(self, target_script: str, **kwargs):
         super().__init__(**kwargs)
         self.target_script = target_script
         self.detected_vars = self._detect_variables()
 
     def _detect_variables(self) -> list[str]:
+        """Parse the target script and return detected variable names."""
         try:
-            with open(self.target_script, "r", encoding="utf-8") as f:
-                tree = ast.parse(f.read())
+            with open(self.target_script, "r", encoding="utf-8") as file:
+                source = file.read()
+
+            tree = ast.parse(source)
+
             detector = VariableDetector()
             detector.visit(tree)
-            return sorted(list(detector.variables))
-        except Exception:
+
+            return sorted(detector.variables)
+
+        except (FileNotFoundError, SyntaxError, OSError):
             return []
 
     def on_mount(self) -> None:
-        for var in self.detected_vars:
-            self.add_option(Selection(var, var, initial_state=True))
+        """Populate the watchlist when the panel is mounted."""
+        for variable in self.detected_vars:
+            self.add_option(
+                Selection(
+                    variable,
+                    variable,
+                    initial_state=True,
+                )
+            )
+
+    def get_selected_variables(self) -> list[str]:
+        """Return the variables currently selected by the user."""
+        return list(self.selected)

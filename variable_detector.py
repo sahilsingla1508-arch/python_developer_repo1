@@ -1,4 +1,4 @@
-﻿import ast
+import ast
 
 
 class VariableDetector(ast.NodeVisitor):

@@ -1,35 +1,53 @@
 import sqlite3
+from contextlib import contextmanager
 
-# Connect to (and create) the database file
-conn = sqlite3.connect("chronicle.db")
-cursor = conn.cursor()
 
-# Create the table with the required columns
-cursor.execute("""
-CREATE TABLE IF NOT EXISTS events (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    timestamp TEXT NOT NULL,
-    line_number INTEGER NOT NULL,
-    variable_name TEXT NOT NULL,
-    serialized_value TEXT NOT NULL
-)
-""")
+def init_db(db_path: str = "chronicle.db"):
+    """Creates the events table if it doesn't exist. Returns a connection."""
+    conn = sqlite3.connect(db_path)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS events (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            timestamp TEXT NOT NULL,
+            line_number INTEGER NOT NULL,
+            variable_name TEXT NOT NULL,
+            serialized_value TEXT NOT NULL
+        )
+    """)
+    conn.commit()
+    return conn
 
-# Insert a test row
-cursor.execute("""
-INSERT INTO events (timestamp, line_number, variable_name, serialized_value)
-VALUES (?, ?, ?, ?)
-""", ("2026-07-11 10:00:00", 1, "name", "Tejas"))
 
-# Save changes
-conn.commit()
+@contextmanager
+def get_connection(db_path: str = "chronicle.db"):
+    conn = sqlite3.connect(db_path)
+    try:
+        yield conn
+    finally:
+        conn.close()
 
-# Read back and print all rows to confirm it worked
-cursor.execute("SELECT * FROM events")
-rows = cursor.fetchall()
-print("Current data in the table:")
-for row in rows:
-    print(row)
 
-conn.close()
-print("Database created and tested successfully!")
+def insert_event(conn, timestamp, line_number, variable_name, serialized_value):
+    conn.execute(
+        "INSERT INTO events (timestamp, line_number, variable_name, serialized_value) "
+        "VALUES (?, ?, ?, ?)",
+        (timestamp, line_number, variable_name, serialized_value),
+    )
+    conn.commit()
+
+
+def get_events(conn):
+    return conn.execute("SELECT * FROM events ORDER BY id").fetchall()
+
+
+def clear_events(conn):
+    conn.execute("DELETE FROM events")
+    conn.commit()
+
+
+if __name__ == "__main__":
+    # Manual test — only runs when you execute this file directly
+    conn = init_db()
+    insert_event(conn, "2026-07-22 10:00:00", 1, "test", "123")
+    print(get_events(conn))
+    conn.close()

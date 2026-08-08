@@ -882,3 +882,188 @@ class TestCLI:
         assert proc.returncode == 0, (
             "Expected exit 0 for 'view --help', got {}".format(proc.returncode)
         )
+
+
+# ---------------------------------------------------------------------------
+# 11. CLI argument validation (missing positional args / bad input)
+# ---------------------------------------------------------------------------
+
+
+class TestCLIArgumentValidation:
+    """
+    Verify that the CLI correctly rejects invocations where the mandatory
+    positional <script> argument is absent or the input is otherwise invalid.
+
+    These tests cover the argument-validation layer rather than the pipeline
+    failure layer (which is covered by TestCLI.test_*_exits_two_on_missing_script).
+    """
+
+    @staticmethod
+    def _run_cli(args, cwd):
+        import os as _os
+        repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        env = _os.environ.copy()
+        existing = env.get("PYTHONPATH", "")
+        env["PYTHONPATH"] = repo_root + (_os.pathsep + existing if existing else "")
+        return subprocess.run(
+            [sys.executable, "-m", "pychronicle"] + args,
+            capture_output=True,
+            text=True,
+            cwd=cwd,
+            env=env,
+        )
+
+    @staticmethod
+    def _repo_root():
+        return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+    def test_run_missing_positional_script_exits_nonzero(self):
+        """'python -m pychronicle run' with no script argument must exit non-zero."""
+        proc = self._run_cli(["run"], cwd=self._repo_root())
+        assert proc.returncode != 0, (
+            "Expected non-zero exit when 'run' is given no positional argument, "
+            "got returncode={}. stdout: {} stderr: {}".format(
+                proc.returncode, proc.stdout, proc.stderr
+            )
+        )
+
+    def test_view_missing_positional_script_exits_nonzero(self):
+        """'python -m pychronicle view' with no script argument must exit non-zero."""
+        proc = self._run_cli(["view"], cwd=self._repo_root())
+        assert proc.returncode != 0, (
+            "Expected non-zero exit when 'view' is given no positional argument, "
+            "got returncode={}. stdout: {} stderr: {}".format(
+                proc.returncode, proc.stdout, proc.stderr
+            )
+        )
+
+    def test_run_syntax_error_script_exits_two(self, tmp_path):
+        """A script with a syntax error must cause 'run' to exit with code 2."""
+        bad = tmp_path / "bad_syntax.py"
+        bad.write_text("def broken(\n    x =\n")
+        proc = self._run_cli(["run", str(bad)], cwd=self._repo_root())
+        assert proc.returncode == 2, (
+            "Expected exit 2 for syntax-error script, got {}. "
+            "stdout: {} stderr: {}".format(proc.returncode, proc.stdout, proc.stderr)
+        )
+
+
+# ---------------------------------------------------------------------------
+# 12. Full pipeline → delta/replay integration (end-to-end)
+# ---------------------------------------------------------------------------
+
+
+class TestDeltaReplayPipelineIntegration:
+    """
+    End-to-end tests verifying the complete integration path:
+
+        run_pipeline() → ChronicleDataAdapter.get_events()
+                       → replay_compressed()
+                       → correct state at each compressed-timeline position
+
+    This complements the unit-level delta tests in TestDeltaCompression by
+    exercising the actual database round-trip and confirming that
+    replay_compressed produces coherent output across the full pipeline.
+    """
+
+    def test_full_pipeline_replay_compressed_index_zero_has_required_keys(
+        self, sample_script_path, tmp_db_path
+    ):
+        """
+        run_pipeline → get_events → replay_compressed at index 0 must return
+        all expected keys with non-None event.
+        """
+        run_pipeline(sample_script_path, tmp_db_path)
+        adapter = ChronicleDataAdapter(tmp_db_path)
+        raw_events = adapter.get_events()
+        source_lines = open(sample_script_path).read().splitlines()
+
+        result = replay_compressed(raw_events, 0, source_lines)
+
+        for key in ("compressed_events", "event", "source_line",
+                    "variable_state", "compression_ratio"):
+            assert key in result, f"Missing key '{key}' in replay_compressed result"
+        assert result["event"] is not None, "Expected a non-None event at index 0"
+        assert len(result["variable_state"]) >= 1, (
+            "Expected at least one variable in state at index 0"
+        )
+
+    def test_full_pipeline_replay_compressed_last_index_variable_state(
+        self, sample_script_path, tmp_db_path
+    ):
+        """
+        At the final compressed-timeline index, variable_state must include all
+        variables captured by the pipeline and the source_line must be non-empty.
+        """
+        run_pipeline(sample_script_path, tmp_db_path)
+        adapter = ChronicleDataAdapter(tmp_db_path)
+        raw_events = adapter.get_events()
+        source_lines = open(sample_script_path).read().splitlines()
+        compressed = adapter.get_compressed_events()
+        last_idx = len(compressed) - 1
+
+        result = replay_compressed(raw_events, last_idx, source_lines)
+
+        assert result["event"] is not None
+        assert isinstance(result["source_line"], str)
+        assert len(result["source_line"]) > 0, (
+            "Expected non-empty source_line at last compressed index"
+        )
+        # All variables present in compressed events must appear in final state
+        compressed_vars = {ev["variable_name"] for ev in compressed}
+        state_vars = set(result["variable_state"].keys())
+        assert compressed_vars == state_vars, (
+            f"Variable mismatch: compressed has {compressed_vars}, "
+            f"variable_state has {state_vars}"
+        )
+
+    def test_compression_actually_reduces_count_for_repeated_values(
+        self, tmp_db_path, tmp_path
+    ):
+        """
+        For a script that assigns the same values across two pipeline runs,
+        the database accumulates duplicate events.  get_compressed_events()
+        must return strictly fewer events than get_events(), confirming that
+        delta compression is effective at cross-run deduplication.
+
+        Note: sys.settrace fires 'line' events *before* a line executes,
+        so a variable only appears in f_locals at the *next* line event.
+        The script includes a trailing no-op (_done = True) so that all
+        preceding assignments are captured before execution ends.
+        """
+        # Run the pipeline twice on the same DB to guarantee cross-run duplicates
+        script = tmp_path / "repeated.py"
+        script.write_text(
+            "x = 99\n"
+            "y = 'hello'\n"
+            "_done = True\n"   # trailing statement so x and y appear in f_locals
+        )
+        from pipeline.runner import run_pipeline as _run
+        r1 = _run(str(script), tmp_db_path)
+        r2 = _run(str(script), tmp_db_path)  # second run reinserts identical values
+
+        adapter = ChronicleDataAdapter(tmp_db_path)
+        raw_events = adapter.get_events()
+        compressed = adapter.get_compressed_events()
+        raw_count = len(raw_events)
+        comp_count = len(compressed)
+
+        # Sanity: both runs must have produced events
+        assert r1["event_count"] > 0, "First run produced no events"
+        assert r2["event_count"] > 0, "Second run produced no events"
+
+        # Compression must reduce the count (cross-run duplicates are removed)
+        assert raw_count > comp_count, (
+            f"Expected compression to reduce event count; "
+            f"raw={raw_count}, compressed={comp_count}"
+        )
+
+        # The compressed count must be exactly the distinct variables captured
+        # (each variable appears with identical values across both runs, so
+        # all second-run events are dropped as consecutive duplicates)
+        distinct_vars = len({ev["variable_name"] for ev in raw_events})
+        assert comp_count == distinct_vars, (
+            f"Expected compressed count ({comp_count}) to equal "
+            f"distinct variable count ({distinct_vars})"
+        )
+

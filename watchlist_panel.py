@@ -55,4 +55,4 @@ class WatchlistPanel(SelectionList):
 
     def get_selected_variables(self) -> list[str]:
         """Return the variables currently selected by the user."""
-        return list(self.selected)
+        return list(self.selected)  

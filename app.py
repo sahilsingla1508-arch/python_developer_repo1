@@ -14,11 +14,13 @@ from watchlist_panel import WatchlistPanel
 
 
 class PyChronicleUI(App):
-    """Core UI Application Orchestrator linking the layout windows."""
+    """
+    Core UI Application Orchestrator linking the layout windows.
+    """
 
     CSS_PATH = "styles.tcss"
 
-    # Press Q to quit the PyChronicle UI
+    # Press Q to quit
     BINDINGS = [
         ("q", "quit", "Quit"),
     ]
@@ -36,16 +38,21 @@ class PyChronicleUI(App):
         self.target_script = target_script
         self.db_path = db_path
 
-        # None means the watchlist has not been initialized yet.
+        # None means watchlist has not been initialized yet.
         self.watched_variables = None
 
     def compose(self) -> ComposeResult:
+
         yield Header(show_clock=True)
 
         with Horizontal(id="workspace"):
 
-            # Code viewer
+            # ---------------------------------------------------------
+            # Code Viewer
+            # ---------------------------------------------------------
+
             with Vertical(id="code-container"):
+
                 yield Static(
                     f"💻 LIVE RUN ARCHITECTURE: {self.target_script}",
                     classes="pane-title"
@@ -56,7 +63,10 @@ class PyChronicleUI(App):
                     id="code-pane"
                 )
 
-            # Variable inspector + Watchlist
+            # ---------------------------------------------------------
+            # Variable Inspector + Watchlist
+            # ---------------------------------------------------------
+
             with Vertical(id="inspector-container"):
 
                 yield Static(
@@ -78,7 +88,10 @@ class PyChronicleUI(App):
                     id="watchlist"
                 )
 
+        # -------------------------------------------------------------
         # Timeline
+        # -------------------------------------------------------------
+
         yield TimelineWidget(
             db_path=self.db_path,
             id="timeline-panel"
@@ -87,10 +100,12 @@ class PyChronicleUI(App):
         yield Footer()
 
     def on_mount(self) -> None:
+
         self.title = "PyChronicle Debugger"
 
-        # Initially all variables are selected by WatchlistPanel.
+        # Initially select all variables
         try:
+
             watchlist = self.query_one(
                 "#watchlist",
                 WatchlistPanel
@@ -101,6 +116,7 @@ class PyChronicleUI(App):
             )
 
         except Exception:
+
             self.watched_variables = set()
 
         self.refresh_ui()
@@ -128,23 +144,38 @@ class PyChronicleUI(App):
 
         self.refresh_ui()
 
-    def on_slider_changed(self, event: Slider.Changed) -> None:
+    def on_slider_changed(
+        self,
+        event: Slider.Changed
+    ) -> None:
+
         self.current_event_id = int(event.value)
 
-    def watch_current_event_id(self, new_id: int) -> None:
+    def watch_current_event_id(
+        self,
+        new_id: int
+    ) -> None:
+
         self.refresh_ui()
 
     def refresh_ui(self):
+
         position = self.current_event_id
 
         line_to_highlight = 1
+
         historical_variables = {}
 
         try:
+
             with sqlite3.connect(self.db_path) as conn:
+
                 cursor = conn.cursor()
 
-                # Get the Nth event.
+                # -----------------------------------------------------
+                # Get selected event's line number
+                # -----------------------------------------------------
+
                 cursor.execute(
                     """
                     SELECT line_number
@@ -158,12 +189,18 @@ class PyChronicleUI(App):
                 row = cursor.fetchone()
 
                 if row:
+
                     line_to_highlight = row[0]
 
-                # Get all events up to the selected timeline position.
+                # -----------------------------------------------------
+                # Get all events up to selected timeline position
+                # -----------------------------------------------------
+
                 cursor.execute(
                     """
-                    SELECT variable_name, serialized_value
+                    SELECT
+                        variable_name,
+                        serialized_value
                     FROM events
                     ORDER BY id ASC
                     LIMIT ?
@@ -171,35 +208,68 @@ class PyChronicleUI(App):
                     (position,)
                 )
 
-                for name, val in cursor.fetchall():
+                rows = cursor.fetchall()
 
-                    # Ignore internal variables.
-                    if name.startswith("__"):
+                for name, val in rows:
+
+                    # -------------------------------------------------
+                    # Output event
+                    # -------------------------------------------------
+
+                    if name == "__output__":
+
+                        historical_variables["Output"] = val
                         continue
 
-                    # Apply Watchlist filter.
+                    # -------------------------------------------------
+                    # Ignore internal variables
+                    # -------------------------------------------------
+
+                    if name.startswith("__"):
+
+                        continue
+
+                    # -------------------------------------------------
+                    # Apply Watchlist filter
+                    # -------------------------------------------------
+
                     if (
                         self.watched_variables is not None
                         and name not in self.watched_variables
                     ):
                         continue
 
+                    # -------------------------------------------------
+                    # Store latest variable value
+                    # -------------------------------------------------
+
                     historical_variables[name] = val
 
         except Exception as e:
-            print(f"Error refreshing UI: {e}")
 
-        # Update Code Viewer and Variable Panel.
+            print(
+                f"Error refreshing UI: {e}"
+            )
+
+        # -------------------------------------------------------------
+        # Update Code Viewer and Variable Panel
+        # -------------------------------------------------------------
+
         try:
+
             self.query_one(
                 "#code-pane",
                 CodeViewer
-            ).highlight_line(line_to_highlight)
+            ).highlight_line(
+                line_to_highlight
+            )
 
             self.query_one(
                 "#var-inspector",
                 VariablePanel
-            ).update_state(historical_variables)
+            ).update_state(
+                historical_variables
+            )
 
             self.sub_title = (
                 f"Step Mutation: {position} | "
@@ -207,4 +277,7 @@ class PyChronicleUI(App):
             )
 
         except Exception as e:
-            print(f"Error updating UI: {e}")
+
+            print(
+                f"Error updating UI: {e}"
+            )

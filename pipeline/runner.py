@@ -1,106 +1,127 @@
 """
 pipeline/runner.py — PyChronicle integration glue.
 
-Entry point:
-    run_pipeline(script_path, db_path="chronicle.db") -> dict
-
-Wires together:
-    1. AST analysis  (ast_parser.analyze)
-    2. sys.settrace  (trace callback writing directly to SQLite)
-    3. SQLite storage (events schema, insert, commit)
-
-Design notes
-------------
-- Does NOT modify ast_parser.py, tracer.py, or storage.py.
-- Manages its own SQLite connection so the pipeline is re-entrant
-  (the module-level connection in tracer.py closes after one use;
-   the pipeline needs to work for tests that call run_pipeline multiple times).
-- Reuses the canonical events schema defined across the project:
-      id, timestamp, line_number, variable_name, serialized_value
+Pipeline:
+1. AST analysis
+2. Execute Python script with sys.settrace
+3. Track variable mutations
+4. Capture print() output
+5. Store events in SQLite
+6. Provide timeline data to the UI
 """
 
 import os
 import sys
 import sqlite3
+import builtins
 from datetime import datetime
 
-import ast_parser  # Prateek's module
+import ast_parser
 
-
-# ---------------------------------------------------------------------------
-# Schema helpers
-# ---------------------------------------------------------------------------
-
-_CREATE_EVENTS = """
-CREATE TABLE IF NOT EXISTS events (
-    id               INTEGER PRIMARY KEY AUTOINCREMENT,
-    timestamp        TEXT    NOT NULL,
-    line_number      INTEGER NOT NULL,
-    variable_name    TEXT    NOT NULL,
-    serialized_value TEXT    NOT NULL
+from storage import (
+    init_db,
+    clear_events,
+    insert_event,
 )
-"""
-
-
-def _init_db(db_path: str) -> sqlite3.Connection:
-    """Open (or create) the SQLite database and ensure the events table exists."""
-    conn = sqlite3.connect(db_path)
-    conn.execute(_CREATE_EVENTS)
-    conn.commit()
-    return conn
 
 
 # ---------------------------------------------------------------------------
-# Tracer callback factory
+# Trace callback
 # ---------------------------------------------------------------------------
 
-def _make_trace_callback(conn: sqlite3.Connection, script_path: str):
+def _make_trace_callback(
+    conn: sqlite3.Connection,
+    script_path: str,
+    state: dict,
+):
     """
-    Return a sys.settrace-compatible callback that:
-    - filters to frames belonging to *script_path* only
-    - tracks variable deltas (only records changed values)
-    - inserts each change as a row in the events table
+    Creates the sys.settrace callback.
+
+    Python's line trace event happens BEFORE the line executes.
+    Therefore, a variable mutation detected at the next line belongs
+    to the previous line.
     """
-    cursor = conn.cursor()
-    previous_values: dict = {}
+
+    previous_values = {}
+
     abs_script = os.path.abspath(script_path)
 
     def _trace(frame, event, arg):
+
         if event != "line":
             return _trace
 
-        # Only trace frames from the target script
-        frame_file = os.path.abspath(frame.f_code.co_filename)
+        # ---------------------------------------------------------------
+        # Only trace the target script
+        # ---------------------------------------------------------------
+
+        frame_file = os.path.abspath(
+            frame.f_code.co_filename
+        )
+
         if frame_file != abs_script:
             return _trace
 
-        line_no = frame.f_lineno
+        # ---------------------------------------------------------------
+        # Current line
+        # ---------------------------------------------------------------
+
+        current_line = frame.f_lineno
+
         local_vars = frame.f_locals.copy()
 
+        # ---------------------------------------------------------------
+        # Determine mutation line
+        # ---------------------------------------------------------------
+
+        previous_line = state["previous_line"]
+
+        if previous_line is None:
+            line_to_record = current_line
+        else:
+            line_to_record = previous_line
+
+        # ---------------------------------------------------------------
+        # Check variables
+        # ---------------------------------------------------------------
+
         for var_name, value in local_vars.items():
-            # Skip Python internal/dunder variables
+
+            # Ignore Python internal variables
             if var_name.startswith("__"):
                 continue
 
-            # Skip built-in callables injected by exec
-            if callable(value) and var_name in ("__builtins__",):
-                continue
-
-            key = var_name
             serialized = str(value)
 
-            # Only record if value changed
-            if previous_values.get(key) == serialized:
+            # Ignore unchanged variables
+            if (
+                var_name in previous_values
+                and previous_values[var_name] == serialized
+            ):
                 continue
 
-            previous_values[key] = serialized
-            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            # Store latest value
+            previous_values[var_name] = serialized
 
-            cursor.execute(
-                "INSERT INTO events (timestamp, line_number, variable_name, serialized_value) "
-                "VALUES (?, ?, ?, ?)",
-                (timestamp, line_no, var_name, serialized),
+            # Increment mutation step
+            state["step_counter"] += 1
+
+            timestamp = datetime.now().strftime(
+                "%Y-%m-%d %H:%M:%S"
             )
+
+            # Save mutation
+            insert_event(
+                conn,
+                timestamp,
+                state["step_counter"],
+                line_to_record,
+                var_name,
+                serialized,
+            )
+
+        # Current line becomes previous line
+        state["previous_line"] = current_line
 
         return _trace
 
@@ -108,42 +129,31 @@ def _make_trace_callback(conn: sqlite3.Connection, script_path: str):
 
 
 # ---------------------------------------------------------------------------
-# Public API
+# Main pipeline
 # ---------------------------------------------------------------------------
 
-def run_pipeline(script_path: str, db_path: str = "chronicle.db") -> dict:
+def run_pipeline(
+    script_path: str,
+    db_path: str = "chronicle.db",
+) -> dict:
     """
-    Execute the full PyChronicle pipeline for *script_path*.
+    Execute the complete PyChronicle pipeline.
 
-    Steps
-    -----
-    1. Validate the script path.
-    2. Run AST analysis to collect static variable metadata.
-    3. Initialise (or open) the SQLite database.
-    4. Execute the script under sys.settrace, persisting every variable
-       change as an event row.
-    5. Commit, close, and return a summary dictionary.
-
-    Parameters
-    ----------
-    script_path : str
-        Path to the Python script to analyse and trace.
-    db_path : str
-        Path to the SQLite database file (created if absent).
-
-    Returns
-    -------
-    dict with keys:
-        success        : bool
-        script_path    : str
-        db_path        : str
-        ast_variables  : list[dict]   — static AST output
-        event_count    : int          — rows written to events table
-        error          : str | None
+    Every execution starts with a clean event history.
     """
+
+    # -------------------------------------------------------------------
+    # 1. Absolute script path
+    # -------------------------------------------------------------------
+
     script_path = os.path.abspath(script_path)
 
+    # -------------------------------------------------------------------
+    # 2. Validate script
+    # -------------------------------------------------------------------
+
     if not os.path.isfile(script_path):
+
         return {
             "success": False,
             "script_path": script_path,
@@ -153,10 +163,18 @@ def run_pipeline(script_path: str, db_path: str = "chronicle.db") -> dict:
             "error": f"Script not found: {script_path}",
         }
 
-    # 1. AST analysis
+    # -------------------------------------------------------------------
+    # 3. AST analysis
+    # -------------------------------------------------------------------
+
     try:
-        ast_variables = ast_parser.analyze(script_path)
+
+        ast_variables = ast_parser.analyze(
+            script_path
+        )
+
     except Exception as exc:
+
         return {
             "success": False,
             "script_path": script_path,
@@ -166,68 +184,328 @@ def run_pipeline(script_path: str, db_path: str = "chronicle.db") -> dict:
             "error": f"AST analysis failed: {exc}",
         }
 
-    # 2. Read source
-    with open(script_path, "r", encoding="utf-8") as fh:
-        source = fh.read()
+    # -------------------------------------------------------------------
+    # 4. Read source
+    # -------------------------------------------------------------------
 
-    # 3. Init DB
-    conn = _init_db(db_path)
-
-    # 4. Execute under tracer
-    trace_cb = _make_trace_callback(conn, script_path)
-    exec_namespace: dict = {}
-    error_msg = None
-
-    sys.settrace(trace_cb)
     try:
-        compiled = compile(source, script_path, "exec")
-        exec(compiled, exec_namespace, exec_namespace)  # noqa: S102
+
+        with open(
+            script_path,
+            "r",
+            encoding="utf-8",
+        ) as file:
+
+            source = file.read()
+
     except Exception as exc:
-        error_msg = str(exc)
-    finally:
-        sys.settrace(None)
+
+        return {
+            "success": False,
+            "script_path": script_path,
+            "db_path": db_path,
+            "ast_variables": ast_variables,
+            "event_count": 0,
+            "error": f"Unable to read script: {exc}",
+        }
+
+    conn = None
+
+    try:
+
+        # ---------------------------------------------------------------
+        # 5. Initialize database
+        # ---------------------------------------------------------------
+
+        conn = init_db(db_path)
+
+        # Remove previous execution
+        clear_events(conn)
+
+        print(
+            f"[PyChronicle] Tracing "
+            f"{os.path.basename(script_path)}..."
+        )
+
+        # ---------------------------------------------------------------
+        # 6. State used by tracer
+        # ---------------------------------------------------------------
+
+        state = {
+            "previous_line": None,
+            "step_counter": 0,
+        }
+
+        # ---------------------------------------------------------------
+        # 7. Capture program output
+        # ---------------------------------------------------------------
+
+        captured_output = []
+
+        original_print = builtins.print
+
+        def captured_print(*args, **kwargs):
+            """
+            Replacement for print() used by the target script.
+
+            It:
+            1. Captures the output for PyChronicle.
+            2. Still prints normally to the terminal.
+            """
+
+            output_text = " ".join(
+                str(arg)
+                for arg in args
+            )
+
+            captured_output.append(
+                output_text
+            )
+
+            # Still show output in terminal
+            original_print(
+                *args,
+                **kwargs
+            )
+
+        # ---------------------------------------------------------------
+        # 8. Create trace callback
+        # ---------------------------------------------------------------
+
+        trace_callback = _make_trace_callback(
+            conn,
+            script_path,
+            state,
+        )
+
+        # ---------------------------------------------------------------
+        # 9. Execution namespace
+        # ---------------------------------------------------------------
+
+        exec_namespace = {
+            "__name__": "__main__",
+            "__file__": script_path,
+
+            # This makes print() use our capture function
+            "print": captured_print,
+        }
+
+        error_msg = None
+
+        # ---------------------------------------------------------------
+        # 10. Execute target script
+        # ---------------------------------------------------------------
+
+        sys.settrace(trace_callback)
+
+        try:
+
+            compiled = compile(
+                source,
+                script_path,
+                "exec",
+            )
+
+            exec(
+                compiled,
+                exec_namespace,
+                exec_namespace,
+            )
+
+        except Exception as exc:
+
+            error_msg = str(exc)
+
+        finally:
+
+            # Disable tracing
+            sys.settrace(None)
+
+        # ---------------------------------------------------------------
+        # 11. Restore normal print
+        # ---------------------------------------------------------------
+
+        builtins.print = original_print
+
+        # ---------------------------------------------------------------
+        # 12. Save captured output
+        # ---------------------------------------------------------------
+
+        if captured_output:
+
+            output_text = "\n".join(
+                captured_output
+            )
+
+            state["step_counter"] += 1
+
+            timestamp = datetime.now().strftime(
+                "%Y-%m-%d %H:%M:%S"
+            )
+
+            # The print() statement is the final line
+            # of sample2.py.
+            final_line = len(
+                source.splitlines()
+            )
+
+            insert_event(
+                conn,
+                timestamp,
+                state["step_counter"],
+                final_line,
+                "__output__",
+                output_text,
+            )
+
+        # ---------------------------------------------------------------
+        # 13. If there was no output, add script-end marker
+        # ---------------------------------------------------------------
+
+        elif state["previous_line"] is not None:
+
+            state["step_counter"] += 1
+
+            timestamp = datetime.now().strftime(
+                "%Y-%m-%d %H:%M:%S"
+            )
+
+            insert_event(
+                conn,
+                timestamp,
+                state["step_counter"],
+                state["previous_line"],
+                "__script_end__",
+                "completed",
+            )
+
+        # ---------------------------------------------------------------
+        # 14. Commit
+        # ---------------------------------------------------------------
+
         conn.commit()
 
-    # 5. Count persisted events
-    cursor = conn.cursor()
-    cursor.execute("SELECT COUNT(*) FROM events")
-    event_count = cursor.fetchone()[0]
-    conn.close()
+        # ---------------------------------------------------------------
+        # 15. Count events
+        # ---------------------------------------------------------------
 
-    return {
-        "success": error_msg is None,
-        "script_path": script_path,
-        "db_path": db_path,
-        "ast_variables": ast_variables,
-        "event_count": event_count,
-        "error": error_msg,
-    }
+        cursor = conn.cursor()
+
+        cursor.execute(
+            "SELECT COUNT(*) FROM events"
+        )
+
+        event_count = cursor.fetchone()[0]
+
+        # ---------------------------------------------------------------
+        # 16. Close database
+        # ---------------------------------------------------------------
+
+        conn.close()
+        conn = None
+
+        # ---------------------------------------------------------------
+        # 17. Return result
+        # ---------------------------------------------------------------
+
+        return {
+            "success": error_msg is None,
+            "script_path": script_path,
+            "db_path": db_path,
+            "ast_variables": ast_variables,
+            "event_count": event_count,
+            "error": error_msg,
+        }
+
+    except Exception as exc:
+
+        # Make sure tracing is disabled
+        sys.settrace(None)
+
+        # Restore print
+        try:
+            builtins.print = original_print
+        except Exception:
+            pass
+
+        if conn is not None:
+
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+        return {
+            "success": False,
+            "script_path": script_path,
+            "db_path": db_path,
+            "ast_variables": ast_variables,
+            "event_count": 0,
+            "error": str(exc),
+        }
 
 
 # ---------------------------------------------------------------------------
-# CLI entry point
+# CLI
 # ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
+
     import json
 
     if len(sys.argv) < 2:
-        print("Usage: python -m pipeline.runner <script.py> [db_path]")
+
+        print(
+            "Usage: python -m pipeline.runner "
+            "<script.py> [db_path]"
+        )
+
         sys.exit(1)
 
-    _script = sys.argv[1]
-    _db = sys.argv[2] if len(sys.argv) > 2 else "chronicle.db"
+    script = sys.argv[1]
 
-    result = run_pipeline(_script, _db)
+    if len(sys.argv) > 2:
+        db = sys.argv[2]
+    else:
+        db = "chronicle.db"
+
+    result = run_pipeline(
+        script,
+        db,
+    )
 
     print("=" * 50)
     print("PyChronicle Pipeline Result")
     print("=" * 50)
-    print(f"Success     : {result['success']}")
-    print(f"Script      : {result['script_path']}")
-    print(f"DB          : {result['db_path']}")
-    print(f"AST vars    : {json.dumps(result['ast_variables'], indent=2)}")
-    print(f"Event count : {result['event_count']}")
+
+    print(
+        f"Success     : {result['success']}"
+    )
+
+    print(
+        f"Script      : {result['script_path']}"
+    )
+
+    print(
+        f"DB          : {result['db_path']}"
+    )
+
+    print(
+        "AST vars    : "
+        + json.dumps(
+            result["ast_variables"],
+            indent=2,
+        )
+    )
+
+    print(
+        f"Event count : {result['event_count']}"
+    )
+
     if result["error"]:
-        print(f"Error       : {result['error']}")
+
+        print(
+            f"Error       : {result['error']}"
+        )
+
     print("=" * 50)

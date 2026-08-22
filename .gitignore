@@ -1,5 +1,28 @@
+# Virtual Environments
+venv/
 .venv/
+env/
+ENV/
+
+# Python Bytecode & Cache
 __pycache__/
 *.pyc
+*.pyo
+*.pyd
 .pytest_cache/
+
+# Databases
+*.db
+*.sqlite
+*.sqlite3
 chronicle.db
+
+# Output & Screenshot artifacts
+*.png
+*.svg
+*.log
+
+# OS & IDE temp files
+.DS_Store
+.vscode/
+.idea/

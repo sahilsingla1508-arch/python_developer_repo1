@@ -1,43 +1,331 @@
+/* ══════════════════════════════════════════════════════
+   PyChronicle — Professional Developer Dark Theme
+   Textual 8.x CSS matching reference design 100%
+   ══════════════════════════════════════════════════════ */
+
+/* ── Root ─────────────────────────────────────────────── */
 Screen {
-    background: #0f0f14;
+    background: #0d1117;
+    color: #c9d1d9;
+    overflow-x: hidden;
+    overflow-y: hidden;
 }
 
-#workspace {
-    layout: grid;
-    grid-size: 2;
-    grid-columns: 3fr 1fr;
-    height: 85%;
-}
-
-#code-container {
-    border: solid $primary;
-    background: #141419;
-    padding: 1;
-    margin: 1;
-}
-
-#inspector-container {
-    border: solid $secondary;
-    background: #111116;
-    padding: 1;
-    margin: 1;
-}
-
-#timeline-panel {
-    height: 15%;
-    background: #17171c;
-    border-top: solid $accent;
+/* ══════════════════════════════════════════════════════
+   HEADER
+   ══════════════════════════════════════════════════════ */
+#app-header {
+    dock: top;
+    height: 1;
+    background: #161b22;
+    layout: horizontal;
     align: center middle;
-    padding: 1;
+    padding: 0 2;
 }
 
+
+#header-brand {
+    color: #58a6ff;
+    text-style: bold;
+    width: auto;
+    padding-right: 2;
+}
+
+#header-separator {
+    color: #30363d;
+    width: auto;
+    padding-right: 2;
+}
+
+#header-tagline {
+    color: #8b949e;
+    width: 1fr;
+}
+
+#header-step {
+    color: #e3b341;
+    text-style: bold;
+    width: auto;
+    padding-left: 2;
+}
+
+/* ══════════════════════════════════════════════════════
+   FOOTER BAR
+   ══════════════════════════════════════════════════════ */
+#app-footer {
+    dock: bottom;
+    height: 1;
+    background: #161b22;
+    border-top: solid #21262d;
+    padding: 0 2;
+    layout: horizontal;
+}
+
+#footer-keys {
+    color: #8b949e;
+    width: 1fr;
+    content-align: left middle;
+}
+
+#footer-script {
+    color: #8b949e;
+    width: auto;
+    content-align: right middle;
+}
+
+/* ══════════════════════════════════════════════════════
+   EXECUTION TIMELINE
+   ══════════════════════════════════════════════════════ */
+#timeline-panel {
+    dock: bottom;
+    height: 5;
+    background: #161b22;
+    border-top: solid #30363d;
+    padding: 0 2;
+    layout: vertical;
+}
+
+#timeline-top-row {
+    height: 1;
+    layout: horizontal;
+    width: 100%;
+}
+
+#timeline-header {
+    color: #58a6ff;
+    text-style: bold;
+    width: 1fr;
+    content-align: left middle;
+}
+
+#timeline-step-label {
+    color: #e3b341;
+    text-style: bold;
+    width: auto;
+    content-align: right middle;
+}
+
+#timeline-slider {
+    width: 100%;
+    height: 1;
+    margin: 0;
+}
+
+#timeline-controls-row {
+    height: 2;
+    align: center middle;
+    layout: horizontal;
+    width: 100%;
+}
+
+/* ── Timeline buttons ────────────────────────────────── */
+#btn-prev,
+#btn-next {
+    width: 12;
+    height: 1;
+    min-height: 1;
+    background: #1c2128;
+    color: #c9d1d9;
+    border: solid #30363d;
+    margin: 0 1;
+    content-align: center middle;
+}
+
+#btn-prev:hover,
+#btn-next:hover {
+    background: #21262d;
+    color: #ffffff;
+    border: solid #58a6ff;
+}
+
+#btn-play {
+    width: 14;
+    height: 1;
+    min-height: 1;
+    background: #0f2a0f;
+    color: #3fb950;
+    border: solid #238636;
+    margin: 0 1;
+    text-style: bold;
+    content-align: center middle;
+}
+
+#btn-play:hover {
+    background: #196127;
+    color: #56d364;
+    border: solid #3fb950;
+}
+
+#btn-play.-playing {
+    background: #2a0f0f;
+    color: #f85149;
+    border: solid #da3633;
+}
+
+#btn-replay {
+    width: 14;
+    height: 1;
+    min-height: 1;
+    background: #0f1a2a;
+    color: #58a6ff;
+    border: solid #1f6feb;
+    margin: 0 1;
+    text-style: bold;
+    content-align: center middle;
+}
+
+#btn-replay:hover {
+    background: #0d2045;
+    color: #79c0ff;
+    border: solid #58a6ff;
+}
+
+/* ══════════════════════════════════════════════════════
+   WORKSPACE  (main area)
+   ══════════════════════════════════════════════════════ */
+#workspace {
+    layout: horizontal;
+    height: 1fr;
+    width: 100%;
+    overflow: hidden;
+}
+
+/* ── Source code panel (left) ────────────────────────── */
+#code-container {
+    width: 1fr;
+    height: 100%;
+    background: #0d1117;
+    border: solid #21262d;
+    border-left: solid #58a6ff;
+    margin: 0 0 0 1;
+    overflow: hidden;
+}
+
+#code-scroll {
+    height: 1fr;
+    width: 100%;
+    overflow-y: scroll;
+    overflow-x: auto;
+    background: #0d1117;
+}
+
+#code-pane {
+    height: auto;
+    padding: 0 1;
+    background: #0d1117;
+}
+
+/* ── Right sidebar ───────────────────────────────────── */
+#right-sidebar {
+    width: 36;
+    height: 100%;
+    background: #0d1117;
+    border: solid #21262d;
+    margin: 0 1 0 0;
+    overflow: hidden;
+}
+
+/* ══════════════════════════════════════════════════════
+   PANE SECTION TITLES
+   ══════════════════════════════════════════════════════ */
 .pane-title {
+    height: 1;
+    background: #161b22;
+    color: #58a6ff;
     text-style: bold;
-    color: $text;
-    margin-bottom: 1;
+    padding: 0 2;
+    border-bottom: solid #21262d;
+    content-align: left middle;
 }
 
-#timeline-label {
-    padding: 1 2;
+.pane-title-secondary {
+    height: 1;
+    background: #161b22;
+    color: #58a6ff;
     text-style: bold;
+    padding: 0 2;
+    border-bottom: solid #21262d;
+    border-top: solid #21262d;
+    content-align: left middle;
+}
+
+.pane-title-status {
+    height: 1;
+    background: #161b22;
+    color: #58a6ff;
+    text-style: bold;
+    padding: 0 2;
+    border-bottom: solid #21262d;
+    border-top: solid #21262d;
+    content-align: left middle;
+}
+
+/* ══════════════════════════════════════════════════════
+   VARIABLE INSPECTOR  (DataTable)
+   ══════════════════════════════════════════════════════ */
+#var-inspector {
+    height: 1fr;
+    min-height: 2;
+    background: #0d1117;
+}
+
+DataTable > .datatable--header {
+    background: #161b22;
+    color: #8b949e;
+    text-style: bold;
+}
+
+DataTable > .datatable--cursor {
+    background: #1f3358;
+    color: #c9d1d9;
+}
+
+DataTable > .datatable--even-row {
+    background: #0d1117;
+}
+
+DataTable > .datatable--odd-row {
+    background: #0f1419;
+}
+
+/* ══════════════════════════════════════════════════════
+   WATCH VARIABLES  (SelectionList)
+   ══════════════════════════════════════════════════════ */
+#watchlist {
+    height: 4;
+    background: #0d1117;
+    padding: 0;
+    border: none;
+}
+
+SelectionList > .selection-list--button {
+    color: #6e7681;
+    background: #0d1117;
+    padding: 0 1;
+}
+
+SelectionList > .selection-list--button-selected {
+    color: #3fb950;
+    background: #0d1117;
+    text-style: bold;
+}
+
+SelectionList:focus > .selection-list--button-highlighted {
+    background: #1c2128;
+    color: #c9d1d9;
+}
+
+SelectionList:focus > .selection-list--button-selected.selection-list--button-highlighted {
+    background: #1c2128;
+    color: #3fb950;
+}
+
+/* ══════════════════════════════════════════════════════
+   SYSTEM STATUS PANEL
+   ══════════════════════════════════════════════════════ */
+#status-panel {
+    height: 4;
+    background: #0d1117;
+    padding: 0 2;
+    color: #c9d1d9;
 }
